@@ -1,0 +1,41 @@
+# Git ignore file for DevContainer
+# Ignore environment variable files
+.env
+# Ignore workspace configuration files
+.code-workspace
+# Ignore any other sensitive or local configuration files
+*.local
+*.secret
+# Ignore logs and temporary files
+logs/
+tmp/
+*.log
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+# Ignore editor-specific files
+.vscode/
+.idea/
+# Ignore node modules if applicable
+node_modules/
+# Ignore Python virtual environments if applicable
+venv/
+__pycache__/
+# Ignore compiled files
+*.pyc
+# Ignore build directories
+build/
+dist/
+# Ignore coverage reports
+coverage/
+htmlcov/
+# Ignore database files
+*.sqlite3
+# Ignore Docker-related files 
+docker-compose.override.yml
+docker-compose.local.yml
+# Ignore any other files that should not be committed
+*.swp
+*.swo
+*.bak
+*.tmp
