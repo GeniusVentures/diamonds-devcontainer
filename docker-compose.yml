@@ -25,7 +25,6 @@ services:
       - diamond-abi:/workspaces/${WORKSPACE_NAME}/diamond-abi
       - diamond-typechain:/workspaces/${WORKSPACE_NAME}/diamond-typechain-types
       - typechain-types:/workspaces/${WORKSPACE_NAME}/typechain-types
-      - coverage:/workspaces/${WORKSPACE_NAME}/coverage
       - reports:/workspaces/${WORKSPACE_NAME}/reports
 
       # SSH and Git configuration
@@ -217,7 +216,6 @@ volumes:
   diamond-abi:
   diamond-typechain:
   typechain-types:
-  coverage:
   reports:
   ganache-data:
   ipfs-data:

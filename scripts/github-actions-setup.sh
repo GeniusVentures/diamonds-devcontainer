@@ -109,7 +109,6 @@ setup_cache_directories() {
         ./diamond-abi \
         ./diamond-typechain-types \
         ./typechain-types \
-        ./coverage \
         ./reports
 
     # Set proper permissions

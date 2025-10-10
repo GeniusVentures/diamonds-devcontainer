@@ -12,6 +12,9 @@ ARG PYTHON_VERSION=3.11
 ARG GO_VERSION=1.24.7
 ARG WORKSPACE_NAME
 
+# Note: DIAMOND_NAME is NOT a build arg because it's only used at runtime
+# It's available via containerEnv and .env file when the container runs
+
 # Environment variables for better Docker behavior
 ENV DEBIAN_FRONTEND=noninteractive \
   PYTHONUNBUFFERED=1 \
@@ -177,7 +180,6 @@ RUN mkdir -p \
   /workspaces/${WORKSPACE_NAME}/diamond-abi \
   /workspaces/${WORKSPACE_NAME}/diamond-typechain-types \
   /workspaces/${WORKSPACE_NAME}/typechain-types \
-  /workspaces/${WORKSPACE_NAME}/coverage \
   /workspaces/${WORKSPACE_NAME}/reports \
   /workspaces/${WORKSPACE_NAME}/logs
 

@@ -2,7 +2,8 @@
 # Diamonds Post-Start Script
 # Runs every time the DevContainer starts
 
-set -euo pipefail
+set -eu  # Exit on error, but allow unset variables with ${VAR:-} syntax
+# Note: Not using pipefail to allow graceful handling of command failures
 
 # Colors for output
 RED='\033[0;31m'
@@ -35,34 +36,38 @@ check_environment_health() {
     local issues_found=0
 
     # Check if we're in the right directory
-    if [[ ! -f "package.json" ]]; then
+    if [ ! -f "package.json" ]; then
         log_error "Not in project root directory"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
 
     # Check Node.js version
     if command -v node >/dev/null 2>&1; then
-        local node_version=$(node --version | sed 's/v//')
-        if [[ "$(printf '%s\n' "$node_version" "22.0.0" | sort -V | head -n1)" != "22.0.0" ]]; then
-            log_warning "Node.js version $node_version may be outdated"
+        local node_version
+        node_version=$(node --version | sed 's/v//')
+        local min_version="22.0.0"
+        if printf '%s\n%s\n' "$min_version" "$node_version" | sort -V -C 2>/dev/null; then
+            log_info "Node.js version: $node_version"
+        else
+            log_warning "Node.js version $node_version may be outdated (minimum: $min_version)"
         fi
     else
         log_error "Node.js not found"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
 
     # Check if dependencies are installed
-    if [[ ! -d "node_modules" ]]; then
+    if [ ! -d "node_modules" ]; then
         log_warning "node_modules not found. Run 'yarn install'"
-        ((issues_found++))
+        issues_found=$((issues_found + 1))
     fi
 
     # Check if contracts are compiled
-    if [[ ! -d "artifacts" ]]; then
+    if [ ! -d "artifacts" ]; then
         log_warning "Contracts not compiled. Run 'yarn compile'"
     fi
 
-    if [[ $issues_found -eq 0 ]]; then
+    if [ "$issues_found" -eq 0 ]; then
         log_success "Environment health check passed"
     else
         log_warning "Found $issues_found environment issues"
@@ -73,12 +78,12 @@ check_environment_health() {
 check_dependency_updates() {
     log_info "Checking for dependency updates..."
 
-    if [[ -f "yarn.lock" ]]; then
+    if [ -f "yarn.lock" ]; then
         # Check if yarn install is needed
         if yarn check --silent >/dev/null 2>&1; then
             log_success "Dependencies are up to date"
         else
-            log_warning "Dependencies may be outdated. Consider running 'yarn install'"
+            log_info "Dependencies may need installation. Run 'yarn install' if needed."
         fi
     fi
 }
@@ -88,7 +93,7 @@ setup_environment_variables() {
     log_info "Setting up environment variables..."
 
     # Load .env file if it exists
-    if [[ -f ".env" ]]; then
+    if [ -f ".env" ]; then
         log_info "Loading environment variables from .env"
         # Note: .env is already mounted and should be loaded by the shell
     else
@@ -113,45 +118,51 @@ check_security_tools() {
     local tools_available=0
 
     # Check git-secrets
-    ((tools_checked++))
+    tools_checked=$((tools_checked + 1))
     if command -v git-secrets >/dev/null 2>&1; then
-        ((tools_available++))
+        tools_available=$((tools_available + 1))
+        log_info "✓ git-secrets available"
     fi
 
     # Check semgrep
-    ((tools_checked++))
+    tools_checked=$((tools_checked + 1))
     if command -v semgrep >/dev/null 2>&1; then
-        ((tools_available++))
+        tools_available=$((tools_available + 1))
+        log_info "✓ semgrep available"
     fi
 
     # Check snyk
-    ((tools_checked++))
+    tools_checked=$((tools_checked + 1))
     if command -v snyk >/dev/null 2>&1; then
-        ((tools_available++))
+        tools_available=$((tools_available + 1))
+        log_info "✓ snyk available"
     fi
 
     # Check socket
-    ((tools_checked++))
+    tools_checked=$((tools_checked + 1))
     if command -v socket >/dev/null 2>&1; then
-        ((tools_available++))
+        tools_available=$((tools_available + 1))
+        log_info "✓ socket available"
     fi
 
     # Check osv-scanner
-    ((tools_checked++))
+    tools_checked=$((tools_checked + 1))
     if command -v osv-scanner >/dev/null 2>&1; then
-        ((tools_available++))
+        tools_available=$((tools_available + 1))
+        log_info "✓ osv-scanner available"
     fi
 
     # Check slither
-    ((tools_checked++))
+    tools_checked=$((tools_checked + 1))
     if command -v slither >/dev/null 2>&1; then
-        ((tools_available++))
+        tools_available=$((tools_available + 1))
+        log_info "✓ slither available"
     fi
 
     log_info "Security tools: $tools_available/$tools_checked available"
 
-    if [[ $tools_available -lt $tools_checked ]]; then
-        log_warning "Some security tools are missing. Run setup-security.sh"
+    if [ "$tools_available" -lt "$tools_checked" ]; then
+        log_warning "Some security tools are missing. They will be installed during post-attach."
     fi
 }
 
@@ -159,27 +170,37 @@ check_security_tools() {
 check_git_status() {
     log_info "Checking git repository status..."
 
-    if [[ -d ".git" ]]; then
-        # Check if there are uncommitted changes
-        if [[ -n $(git status --porcelain) ]]; then
-            log_warning "Uncommitted changes detected"
-        else
-            log_success "Working directory is clean"
-        fi
+    if [ ! -d ".git" ]; then
+        log_warning "Not in a git repository"
+        return 0
+    fi
 
-        # Check current branch
-        local current_branch=$(git branch --show-current)
-        log_info "Current branch: $current_branch"
+    # Check if there are uncommitted changes
+    if [ -n "$(git status --porcelain 2>/dev/null || true)" ]; then
+        log_warning "Uncommitted changes detected"
+    else
+        log_success "Working directory is clean"
+    fi
 
-        # Check if branch is behind remote
-        if git fetch --quiet 2>/dev/null; then
-            local behind_count=$(git rev-list HEAD...origin/$current_branch --count 2>/dev/null || echo "0")
-            if [[ "$behind_count" -gt 0 ]]; then
+    # Check current branch
+    local current_branch
+    current_branch=$(git branch --show-current 2>/dev/null || echo "unknown")
+    log_info "Current branch: $current_branch"
+
+    # Check if branch is behind remote (with timeout to avoid hanging)
+    # Use timeout command if available, otherwise skip this check
+    if command -v timeout >/dev/null 2>&1; then
+        if timeout 5s git fetch --quiet 2>/dev/null || true; then
+            local behind_count
+            behind_count=$(git rev-list HEAD...origin/"$current_branch" --count 2>/dev/null || echo "0")
+            if [ "$behind_count" -gt 0 ] 2>/dev/null; then
                 log_warning "Branch is $behind_count commits behind remote"
             fi
+        else
+            log_info "Skipped remote check (timeout or no network)"
         fi
     else
-        log_warning "Not in a git repository"
+        log_info "Skipped remote check (timeout command not available)"
     fi
 }
 
@@ -188,15 +209,32 @@ setup_development_server() {
     log_info "Checking development server setup..."
 
     # Check if Hardhat network should be running
-    if [[ "${START_HARDHAT_NETWORK:-false}" == "true" ]]; then
+    if [ "${START_HARDHAT_NETWORK:-false}" == "true" ]; then
         log_info "Starting Hardhat network in background..."
 
         # Check if port 8545 is already in use
-        if lsof -Pi :8545 -sTCP:LISTEN -t >/dev/null 2>&1; then
-            log_info "Hardhat network already running on port 8545"
+        if command -v lsof >/dev/null 2>&1; then
+            if lsof -Pi :8545 -sTCP:LISTEN -t >/dev/null 2>&1; then
+                log_info "Hardhat network already running on port 8545"
+                return 0
+            fi
         else
-            nohup npx hardhat node > logs/hardhat-network.log 2>&1 &
+            # Fallback: try to connect to the port
+            if timeout 1s bash -c 'cat < /dev/null > /dev/tcp/localhost/8545' 2>/dev/null; then
+                log_info "Hardhat network already running on port 8545"
+                return 0
+            fi
+        fi
+
+        # Start Hardhat network
+        if [ ! -d "logs" ]; then
+            mkdir -p logs
+        fi
+        
+        if nohup npx hardhat node > logs/hardhat-network.log 2>&1 & then
             log_success "Hardhat network started in background"
+        else
+            log_warning "Failed to start Hardhat network"
         fi
     fi
 }
@@ -229,14 +267,14 @@ run_startup_health_checks() {
     log_info "Running startup health checks..."
 
     # Quick compilation check
-    if [[ -d "artifacts" ]] && [[ -d "diamond-abi" ]]; then
+    if [ -d "artifacts" ] && [ -d "diamond-abi" ]; then
         log_success "Contracts appear to be compiled"
     else
         log_info "Contracts may need compilation. Run 'yarn compile'"
     fi
 
     # Check if TypeScript types are generated
-    if [[ -d "typechain-types" ]] && [[ -d "diamond-typechain-types" ]]; then
+    if [ -d "typechain-types" ] && [ -d "diamond-typechain-types" ]; then
         log_success "TypeChain types are generated"
     else
         log_info "TypeChain types may need generation. Run 'yarn compile'"

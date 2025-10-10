@@ -613,6 +613,49 @@ This is because Docker Compose has restrictions on network names and will automa
 | diamonds-project | `diamonds_project` | `diamonds_project-network` |
 | my-new-project | `my_new_project` | `my_new_project-network` |
 
+## Environment Variables
+
+### Understanding Environment Variable Sources
+
+The DevContainer uses environment variables from three sources:
+
+1. **Host Environment Variables** (build-time) - Set on your host machine, used during container build
+2. **Container Environment Variables** (runtime) - Set in `devcontainer.json`, available in running container  
+3. **.env File Variables** (application-level) - Used by Hardhat and scripts, loaded at runtime
+
+**See [ENV_VARS.md](./ENV_VARS.md) for detailed documentation.**
+
+### Required Variables
+
+- **WORKSPACE_NAME**: Name of the workspace directory (default: `diamonds_project`)
+- **DIAMOND_NAME**: Name of the diamond contract to work with (default: `ExampleDiamond`)
+
+### Setting Environment Variables
+
+#### Option 1: Use Helper Script (Recommended)
+```bash
+# On your HOST machine (before opening DevContainer)
+source .devcontainer/set-host-env.sh
+# Then rebuild the container
+```
+
+#### Option 2: Manual Export
+```bash
+# On your HOST machine
+export WORKSPACE_NAME=diamonds_dev_env
+export DIAMOND_NAME=ExampleDiamond
+# Then rebuild the container
+```
+
+#### Option 3: Edit .env File
+The `.env` file values are used as fallback by scripts:
+```bash
+WORKSPACE_NAME=diamonds_dev_env
+DIAMOND_NAME=ExampleDiamond
+```
+
+**Note**: The `.env` file is NOT read during container build, only at runtime.
+
 ### Troubleshooting Portable Setup
 
 #### Container fails to build

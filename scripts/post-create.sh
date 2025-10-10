@@ -2,7 +2,7 @@
 # Diamonds Post-Create Script
 # Runs after DevContainer creation to set up the development environment
 
-set -euo pipefail
+set -eu  # Exit on error, but allow unset variables with ${VAR:-} syntax
 
 # Colors for output
 RED='\033[0;31m'
@@ -113,10 +113,23 @@ compile_solidity() {
 generate_typechain() {
     log_info "Generating TypeChain types..."
 
-    if [ -z "$DIAMOND_NAME" ]; then
+    # Check if DIAMOND_NAME is set, if not try to load from .env
+    if [ -z "${DIAMOND_NAME:-}" ]; then
+        log_info "DIAMOND_NAME not set in environment, checking .env file..."
+        if [ -f ".env" ]; then
+            # Source .env file to get DIAMOND_NAME
+            export $(grep -v '^#' .env | grep -E '^DIAMOND_NAME=' | xargs)
+        fi
+    fi
+
+    # Final check for DIAMOND_NAME
+    if [ -z "${DIAMOND_NAME:-}" ]; then
         log_warning "DIAMOND_NAME is not set. Skipping TypeChain generation."
+        log_info "Set DIAMOND_NAME in your environment or .env file to enable TypeChain generation."
         return 0
     fi
+
+    log_info "Using DIAMOND_NAME: $DIAMOND_NAME"
 
     if npx hardhat diamond:generate-abi-typechain --diamond-name "$DIAMOND_NAME"; then
         log_success "TypeChain types generated successfully"

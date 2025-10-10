@@ -96,7 +96,8 @@
     "GAS_REPORTER_ENABLED": "false",
     "REPORT_GAS": "false",
     "PYTHONUNBUFFERED": "1",
-    "PIP_DISABLE_PIP_VERSION_CHECK": "1"
+    "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+    "DIAMOND_NAME": "${localEnv:DIAMOND_NAME:ExampleDiamond}"
   },
   "mounts": [
     "source=${localWorkspaceFolder}/node_modules,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/node_modules,type=bind,consistency=cached",
@@ -105,7 +106,6 @@
     "source=${localWorkspaceFolder}/diamond-abi,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/diamond-abi,type=bind,consistency=cached",
     "source=${localWorkspaceFolder}/diamond-typechain-types,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/diamond-typechain-types,type=bind,consistency=cached",
     "source=${localWorkspaceFolder}/typechain-types,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/typechain-types,type=bind,consistency=cached",
-    "source=${localWorkspaceFolder}/coverage,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/coverage,type=bind,consistency=cached",
     "source=${localWorkspaceFolder}/reports,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/reports,type=bind,consistency=cached",
     "source=${localWorkspaceFolder}/.git,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/.git,type=bind,consistency=cached",
     "source=${localWorkspaceFolder}/.env,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/.env,type=bind,consistency=cached"
