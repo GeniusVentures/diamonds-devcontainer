@@ -186,6 +186,11 @@ RUN mkdir -p \
 # Set proper permissions
 RUN chown -R node:node /workspaces/${WORKSPACE_NAME}  
 
+# Set aliases for convenience (can be overridden in shell)
+RUN echo "alias ll='ls -alFh'" >> /home/node/.bashrc && \
+  echo "alias la='ls -A'" >> /home/node/.bashrc && \
+  echo "alias l='ls -CF'" >> /home/node/.bashrc
+
 # Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD node --version && yarn --version && python3 --version && go version
