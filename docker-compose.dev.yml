@@ -1,0 +1,135 @@
+version: "3.8"
+
+# Diamonds DevContainer Docker Compose Configuration with Vault Integration
+# Provides multi-service development environment with secure secret management
+
+services:
+  # Main DevContainer service
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        NODE_VERSION: 20
+        PYTHON_VERSION: 3.11
+        WORKSPACE_NAME: ${WORKSPACE_NAME}
+    volumes:
+      # Project source code
+      - ..:/workspaces/${WORKSPACE_NAME}:cached
+
+      # Cache volumes for performance
+      - yarn-cache:/home/node/.yarn/cache
+      - node-modules:/workspaces/${WORKSPACE_NAME}/node_modules
+      - hardhat-artifacts:/workspaces/${WORKSPACE_NAME}/artifacts
+      - hardhat-cache:/workspaces/${WORKSPACE_NAME}/cache
+      - diamond-abi:/workspaces/${WORKSPACE_NAME}/diamond-abi
+      - diamond-typechain:/workspaces/${WORKSPACE_NAME}/diamond-typechain-types
+      - typechain-types:/workspaces/${WORKSPACE_NAME}/typechain-types
+      - reports:/workspaces/${WORKSPACE_NAME}/reports
+
+      # SSH and Git configuration
+      - ~/.ssh:/home/node/.ssh:ro
+      - ~/.gitconfig:/home/node/.gitconfig:ro
+
+      # Environment file
+      - ./.env:/workspaces/${WORKSPACE_NAME}/.env
+
+    working_dir: /workspaces/${WORKSPACE_NAME}
+    command: sleep infinity
+    ports:
+      - "8545:8545" # Hardhat Network
+      - "8546:8546" # Additional Blockchain Node
+      - "3000:3000" # Frontend Development
+      - "5000:5000" # API/Backend
+      - "8080:8080" # Documentation/Other
+      - "8200:8200" # Vault API
+    environment:
+      - NODE_ENV=development
+      - HARDHAT_NETWORK=hardhat
+      - CI_MODE=false
+      - GAS_REPORTER_ENABLED=false
+      - REPORT_GAS=false
+      - PYTHONUNBUFFERED=1
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+      - WORKSPACE_NAME=${WORKSPACE_NAME}
+      - VAULT_ADDR=http://vault-dev:8200
+      - DIAMOND_NAME=${DIAMOND_NAME:-ExampleDiamond}
+    networks:
+      - ${WORKSPACE_NAME}-network
+    depends_on:
+      - vault-dev
+      - hardhat-node
+    healthcheck:
+      test: ["CMD", "node", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # HashiCorp Vault Dev Server for secure secret management
+  vault-dev:
+    image: hashicorp/vault:latest
+    command: server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200
+    ports:
+      - "8200:8200"
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=root
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+      - VAULT_LOG_LEVEL=info
+    volumes:
+      - vault-data:/vault/data
+      - vault-config:/vault/config
+      - vault-logs:/vault/logs
+    networks:
+      - ${WORKSPACE_NAME}-network
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Local Hardhat Network Node
+  hardhat-node:
+    image: node:20-bookworm
+    volumes:
+      - ..:/workspaces/${WORKSPACE_NAME}:cached
+      - node-modules:/workspaces/${WORKSPACE_NAME}/node_modules
+    working_dir: /workspaces/${WORKSPACE_NAME}
+    command: >
+      bash -c "
+        yarn install --frozen-lockfile --prefer-offline &&
+        npx hardhat node --hostname 0.0.0.0 --port 8545
+      "
+    ports:
+      - "8545:8545"
+    environment:
+      - NODE_ENV=development
+      - WORKSPACE_NAME=${WORKSPACE_NAME}
+    networks:
+      - ${WORKSPACE_NAME}-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8545"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+# Named volumes for persistence and caching
+volumes:
+  yarn-cache:
+  node-modules:
+  hardhat-artifacts:
+  hardhat-cache:
+  diamond-abi:
+  diamond-typechain:
+  typechain-types:
+  reports:
+  vault-data:
+  vault-config:
+  vault-logs:
+
+# Networks for inter-service communication
+networks:
+  ${WORKSPACE_NAME}-network:
+    driver: bridge
