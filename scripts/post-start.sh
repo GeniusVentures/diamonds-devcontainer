@@ -262,9 +262,148 @@ display_welcome_message() {
     log_info "Happy coding! 🚀"
 }
 
+# Function to auto-detect Vault configuration status
+auto_detect_vault_status() {
+    log_info "Auto-detecting Vault configuration status..."
+
+    local vault_configured=true
+    local recommendations=()
+
+    # Check if Vault CLI is available
+    if ! command -v vault >/dev/null 2>&1; then
+        vault_configured=false
+        recommendations+=("Install Vault CLI: https://www.vaultproject.io/downloads")
+    fi
+
+    # Check VAULT_ADDR
+    if [[ -z "${VAULT_ADDR:-}" ]]; then
+        vault_configured=false
+        recommendations+=("Set VAULT_ADDR environment variable (usually http://vault-dev:8200)")
+    fi
+
+    # Check if Vault server is accessible
+    if [[ -n "${VAULT_ADDR:-}" ]] && ! curl -s --max-time 3 "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
+        vault_configured=false
+        recommendations+=("Start Vault server: docker-compose up vault-dev")
+    fi
+
+    # Check GitHub token
+    if [[ -z "${GITHUB_TOKEN:-}" ]] && [[ ! -f ~/.config/gh/hosts.yml ]] && ! gh auth status >/dev/null 2>&1; then
+        vault_configured=false
+        recommendations+=("Set GITHUB_TOKEN or authenticate with GitHub CLI")
+    fi
+
+    # Check Vault authentication
+    if command -v vault >/dev/null 2>&1 && [[ -n "${VAULT_ADDR:-}" ]]; then
+        if ! vault status >/dev/null 2>&1; then
+            vault_configured=false
+            recommendations+=("Initialize Vault: ./.devcontainer/scripts/vault-init.sh")
+        elif ! vault token lookup >/dev/null 2>&1; then
+            vault_configured=false
+            recommendations+=("Authenticate with Vault: vault login -method=github token=\$GITHUB_TOKEN")
+        fi
+    fi
+
+    # Check if secrets exist
+    if command -v vault >/dev/null 2>&1 && vault status >/dev/null 2>&1 && vault token lookup >/dev/null 2>&1; then
+        if ! vault kv list secret/dev >/dev/null 2>&1; then
+            recommendations+=("Migrate secrets to Vault: ./.devcontainer/scripts/setup/migrate-secrets-to-vault.sh")
+        fi
+    fi
+
+    # Report status
+    if [[ "$vault_configured" == "true" ]]; then
+        log_success "Vault is properly configured and ready to use"
+
+        # Show quick commands
+        echo ""
+        log_info "Quick Vault commands:"
+        echo "  • View secrets: vault kv list secret/dev"
+        echo "  • Add secret: vault kv put secret/dev/KEY value=VALUE"
+        echo "  • Get secret: vault kv get secret/dev/KEY"
+        echo "  • Validate setup: ./.devcontainer/scripts/validate-vault-setup.sh"
+    else
+        log_warning "Vault configuration needs attention"
+
+        # Show recommendations
+        echo ""
+        log_info "To complete Vault setup:"
+        for rec in "${recommendations[@]}"; do
+            echo "  • $rec"
+        done
+
+        # Offer to run setup wizard
+        echo ""
+        if [[ -t 0 ]] && [[ -f "./.devcontainer/scripts/setup/vault-setup-wizard.sh" ]]; then
+            echo -e "${YELLOW}Would you like to run the interactive setup wizard? (y/N): ${NC}\c"
+            read -r response
+            if [[ "$response" =~ ^[Yy]$ ]]; then
+                log_info "Starting Vault setup wizard..."
+                ./.devcontainer/scripts/setup/vault-setup-wizard.sh
+            fi
+        else
+            log_info "Run setup wizard: ./.devcontainer/scripts/setup/vault-setup-wizard.sh"
+        fi
+    fi
+}
+
+# Function to refresh secrets from Vault if they've been updated
+refresh_vault_secrets() {
+    log_info "Checking for updated Vault secrets..."
+
+    local vault_script="./scripts/vault-fetch-secrets.sh"
+    local last_refresh_file="/tmp/vault-secrets-last-refresh"
+
+    # Check if vault script exists
+    if [[ ! -f "$vault_script" ]]; then
+        log_info "Vault script not found, skipping secret refresh"
+        return 0
+    fi
+
+    # Check if we should refresh (every 5 minutes or if forced)
+    local current_time
+    current_time=$(date +%s)
+    local last_refresh=0
+
+    if [[ -f "$last_refresh_file" ]]; then
+        last_refresh=$(cat "$last_refresh_file" 2>/dev/null || echo 0)
+    fi
+
+    local time_diff=$((current_time - last_refresh))
+    local refresh_interval=300  # 5 minutes
+
+    if [[ $time_diff -lt $refresh_interval ]]; then
+        log_info "Secrets were refreshed recently ($((time_diff / 60)) minutes ago), skipping"
+        return 0
+    fi
+
+    # Check if Vault is accessible and we have secrets
+    if command -v vault >/dev/null 2>&1 && [[ -n "${VAULT_ADDR:-}" ]]; then
+        if vault status >/dev/null 2>&1 && vault kv list secret/dev >/dev/null 2>&1; then
+            log_info "Refreshing secrets from Vault..."
+            if "$vault_script" --quiet; then
+                echo "$current_time" > "$last_refresh_file"
+                log_success "Vault secrets refreshed successfully"
+            else
+                log_warning "Failed to refresh Vault secrets"
+            fi
+        else
+            log_info "Vault not accessible or no secrets available"
+        fi
+    else
+        log_info "Vault not configured, skipping secret refresh"
+    fi
+}
+
 # Function to run startup health checks
 run_startup_health_checks() {
     log_info "Running startup health checks..."
+
+    # Check Vault configuration status
+    auto_detect_vault_status
+
+    # Refresh secrets if needed
+    refresh_vault_secrets
 
     # Quick compilation check
     if [ -d "artifacts" ] && [ -d "diamond-abi" ]; then

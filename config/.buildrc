@@ -1,4 +1,4 @@
-# GNUS-DAO Build Optimization Configuration
+# Diamonds Build Optimization Configuration
 
 # Node.js memory and performance settings
 NODE_OPTIONS=--max-old-space-size=4096

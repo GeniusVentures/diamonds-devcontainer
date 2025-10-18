@@ -275,6 +275,38 @@ verify_environment() {
     log_info "Environment verification: $checks_passed/$total_checks checks passed"
 }
 
+# Function to fetch secrets from Vault
+fetch_vault_secrets() {
+    log_info "Fetching secrets from HashiCorp Vault..."
+
+    local vault_script="./scripts/vault-fetch-secrets.sh"
+
+    if [[ -f "$vault_script" ]]; then
+        if [[ -x "$vault_script" ]]; then
+            log_info "Running Vault secret fetch script..."
+            if "$vault_script"; then
+                log_success "Vault secrets fetched successfully"
+            else
+                log_warning "Vault secret fetching failed, but continuing setup..."
+                log_info "You may need to run: $vault_script manually"
+                log_info "Or migrate secrets using: ./scripts/setup/migrate-secrets-to-vault.sh"
+            fi
+        else
+            log_warning "Vault script exists but is not executable: $vault_script"
+            log_info "Making script executable and running..."
+            chmod +x "$vault_script"
+            if "$vault_script"; then
+                log_success "Vault secrets fetched successfully"
+            else
+                log_warning "Vault secret fetching failed after making executable"
+            fi
+        fi
+    else
+        log_warning "Vault secret fetch script not found: $vault_script"
+        log_info "You may need to set up Vault integration manually"
+    fi
+}
+
 # Function to display next steps
 display_next_steps() {
     log_success "Diamonds DevContainer setup completed!"
@@ -310,6 +342,7 @@ main() {
     setup_hardhat_config
     setup_multichain_testing
     verify_environment
+    fetch_vault_secrets
 
     # Display next steps
     display_next_steps

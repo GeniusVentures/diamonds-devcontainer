@@ -5,10 +5,36 @@
 set -e
 
 # Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 VAULT_ADDR="${VAULT_ADDR:-http://vault-dev:8200}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
-ENV_FILE="${ENV_FILE:-../.env}"
+ENV_FILE="${ENV_FILE:-${PROJECT_ROOT}/.env}"
 FALLBACK_TO_ENV="${FALLBACK_TO_ENV:-true}"
+QUIET_MODE="${QUIET_MODE:-false}"
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --quiet)
+            QUIET_MODE=true
+            shift
+            ;;
+        --no-fallback)
+            FALLBACK_TO_ENV=false
+            shift
+            ;;
+        --env-file=*)
+            ENV_FILE="${1#*=}"
+            shift
+            ;;
+        *)
+            log_error "Unknown option: $1"
+            echo "Usage: $0 [--quiet] [--no-fallback] [--env-file=FILE]"
+            exit 1
+            ;;
+    esac
+done
 
 # Colors for output
 RED='\033[0;31m'
@@ -19,15 +45,21 @@ NC='\033[0m' # No Color
 
 # Logging functions
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    if [[ "$QUIET_MODE" != "true" ]]; then
+        echo -e "${BLUE}[INFO]${NC} $1"
+    fi
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    if [[ "$QUIET_MODE" != "true" ]]; then
+        echo -e "${GREEN}[SUCCESS]${NC} $1"
+    fi
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    if [[ "$QUIET_MODE" != "true" ]]; then
+        echo -e "${YELLOW}[WARNING]${NC} $1"
+    fi
 }
 
 log_error() {
@@ -137,11 +169,27 @@ fallback_to_env() {
 
     log_warning "Falling back to .env file for missing secrets..."
 
-    # Source the .env file
-    set -a
-    # shellcheck source=/dev/null
-    source "$ENV_FILE"
-    set +a
+    # Parse the .env file line by line, handling spaces around =
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+        # Remove leading/trailing whitespace
+        line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+        # Parse KEY = VALUE or KEY=VALUE format
+        if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]}"
+
+            # Remove surrounding quotes if present
+            value=$(echo "$value" | sed 's/^"\(.*\)"$/\1/;s/^'\''\(.*\)'\''$/\1/')
+
+            # Export the variable
+            export "$key"="$value"
+            log_info "Loaded $key from .env file"
+        fi
+    done < "$ENV_FILE"
 
     log_success "Loaded secrets from .env file"
 }
@@ -158,6 +206,12 @@ validate_critical_secrets() {
     done
 
     if [ ${#missing_critical[@]} -gt 0 ]; then
+        # In development with fallback to .env, TEST_PRIVATE_KEY is sufficient
+        if [[ "${missing_critical[*]}" == "PRIVATE_KEY" ]] && [[ -n "${TEST_PRIVATE_KEY:-}" ]]; then
+            log_warning "PRIVATE_KEY missing but TEST_PRIVATE_KEY available - proceeding for development"
+            return 0
+        fi
+
         log_error "Critical secrets missing: ${missing_critical[*]}"
         log_error "Cannot continue without critical secrets"
         return 1
