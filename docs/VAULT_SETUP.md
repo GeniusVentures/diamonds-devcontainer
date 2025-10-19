@@ -1,6 +1,6 @@
-# HashiCorp Vault Setup Guide for GNUS-DAO DevContainer
+# HashiCorp Vault Setup Guide for Diamonds Project DevContainer
 
-This guide provides comprehensive instructions for setting up and using HashiCorp Vault for secure secret management in the GNUS-DAO development environment.
+This guide provides comprehensive instructions for setting up and using HashiCorp Vault for secure secret management in the Diamonds Project development environment.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ This guide provides comprehensive instructions for setting up and using HashiCor
 
 ## Overview
 
-The GNUS-DAO project uses HashiCorp Vault for secure secret management in development and CI/CD environments. Vault provides:
+The Diamonds Project project uses HashiCorp Vault for secure secret management in development and CI/CD environments. Vault provides:
 
 - **Secure Storage**: Encrypted storage of sensitive data (API keys, private keys, tokens)
 - **Access Control**: Role-based access control with GitHub authentication
@@ -43,7 +43,7 @@ The GNUS-DAO project uses HashiCorp Vault for secure secret management in develo
 ### Vault Access
 
 - GitHub Personal Access Token with `repo` scope
-- Access to GNUS-DAO GitHub organization
+- Access to Diamonds Project GitHub organization
 - VPN access (if required for corporate networks)
 
 ## Quick Start
@@ -52,8 +52,8 @@ The GNUS-DAO project uses HashiCorp Vault for secure secret management in develo
 
 ```bash
 # Clone the repository
-git clone https://github.com/gnus-ai/gnus-dao.git
-cd gnus-dao
+git clone https://github.com/GeniusVentures/diamonds-base.git
+cd diamonds-base
 
 # Set up GitHub token for Vault authentication
 export GITHUB_TOKEN=your_github_token_here
@@ -343,7 +343,7 @@ tail -f logs/vault-debug.log
 docker-compose down
 
 # Remove Vault data
-docker volume rm gnusdao_vault-data
+docker volume rm <PROJECT_NAME>_vault-data
 
 # Restart environment
 docker-compose up -d
@@ -459,13 +459,12 @@ Integrate with GitHub Actions:
 ### Resources
 
 - [HashiCorp Vault Documentation](https://www.vaultproject.io/docs)
-- [GNUS-DAO Security Guidelines](../../SECURITY.md)
+- [Diamonds Project Security Guidelines](../../SECURITY.md)
 - [DevContainer Troubleshooting](VAULT_TROUBLESHOOTING.md)
 - [CI/CD Pipeline Documentation](../../docs/CI-PIPELINE.md)
 
 ---
 
-**Last Updated**: October 2024
+**Last Updated**: October 2025
 **Version**: 1.0
-**Maintainer**: GNUS-DAO DevOps Team</content>
-<parameter name="filePath">/home/jamatulli/decentralization/gnus.ai/gnus-dao/VAULT_SETUP.md
+**Maintainer**: Diamonds DevOps Team</content>

@@ -1,6 +1,6 @@
-# Vault Troubleshooting Guide for GNUS-DAO
+# Vault Troubleshooting Guide for Diamonds Project
 
-This guide provides step-by-step solutions for common HashiCorp Vault integration issues in the GNUS-DAO development environment.
+This guide provides step-by-step solutions for common HashiCorp Vault integration issues in the Diamonds Project development environment.
 
 ## Quick Diagnosis
 
@@ -110,11 +110,11 @@ curl -H "Authorization: token $GITHUB_TOKEN" \
    ```bash
    # Test repository access
    curl -H "Authorization: token $GITHUB_TOKEN" \
-        https://api.github.com/repos/gnus-ai/gnus-dao
+        https://api.github.com/repos/<ORG-NAME>/<REPO-NAME>
    ```
 
 4. **Check Organization Membership:**
-   - Ensure you're a member of the GNUS-DAO GitHub organization
+   - Ensure you're a member of the Diamonds Project GitHub organization
    - Verify token has access to private repositories
 
 ### Issue 3: Secrets Not Loading
@@ -192,7 +192,7 @@ echo $TEST_PRIVATE_KEY
 1. **Verify .env File Location:**
    ```bash
    # Should be in project root
-   ls -la /home/jamatulli/decentralization/gnus.ai/gnus-dao/.env
+   ls -la <WORKSPACE_name>/.env
    ```
 
 2. **Check .env File Format:**
@@ -241,7 +241,7 @@ curl http://localhost:8200/v1/sys/health
    ```bash
    # Verify containers are on same network
    docker-compose ps
-   docker network inspect gnusdao_default
+   docker network inspect <PROJECT_NAME>_default
    ```
 
 2. **Restart Network:**
@@ -288,7 +288,7 @@ vault kv get secret/dev/PRIVATE_KEY
 **Solutions:**
 
 1. **Check GitHub Organization Membership:**
-   - Ensure you're a member of GNUS-DAO organization
+   - Ensure you're a member of Diamonds Project organization
    - Verify organization approval for private repos
 
 2. **Re-authenticate:**
@@ -422,7 +422,7 @@ env | grep -E "(VAULT|GITHUB|PRIVATE|API)" | sort
 ps aux | grep vault
 
 # Docker environment
-docker exec gnusdao-devcontainer-1 env
+docker exec <PROJECT_NAME>-devcontainer-1 env
 ```
 
 ## Recovery Procedures
@@ -457,7 +457,7 @@ Complete Vault reset (use with caution):
 docker-compose down
 
 # Remove Vault data volume
-docker volume rm gnusdao_vault-data
+docker volume rm <PROJECT_NAME>_vault-data
 
 # Clean up containers
 docker system prune -f
@@ -508,7 +508,7 @@ Set up monitoring alerts:
 # Health check script
 #!/bin/bash
 if ! curl -s http://vault-dev:8200/v1/sys/health > /dev/null; then
-    echo "Vault health check failed" | mail -s "Vault Alert" admin@gnus.ai
+    echo "Vault health check failed" | mail -s "Vault Alert" admin@example.com
 fi
 ```
 
@@ -518,11 +518,11 @@ Regular Vault backups:
 
 ```bash
 # Backup Vault data
-docker run --rm -v gnusdao_vault-data:/vault-data \
+docker run --rm -v <PROJECT_NAME>_vault-data:/vault-data \
   alpine tar czf - -C /vault-data . > vault-backup-$(date +%Y%m%d).tar.gz
 
 # Store backups securely
-aws s3 cp vault-backup-*.tar.gz s3://gnus-dao-backups/
+aws s3 cp vault-backup-*.tar.gz s3://diamonds-backups/
 ```
 
 ## Getting Help
@@ -554,13 +554,12 @@ docker-compose logs vault-dev | tail -50
 
 ### Emergency Contacts
 
-- **DevOps Team**: devops@gnus.ai
-- **Security Team**: security@gnus.ai
-- **Infrastructure**: infra@gnus.ai
+- **DevOps Team**: devops@example.com
+- **Security Team**: security@example.com
+- **Infrastructure**: infra@example.com
 
 ---
 
 **Last Updated**: October 2024
 **Version**: 1.0
-**Maintainer**: GNUS-DAO DevOps Team</content>
-<parameter name="filePath">/home/jamatulli/decentralization/gnus.ai/gnus-dao/VAULT_TROUBLESHOOTING.md
+**Maintainer**: Diamonds Project DevOps Team</content>

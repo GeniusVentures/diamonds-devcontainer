@@ -37,12 +37,10 @@ services:
     working_dir: /workspaces/${WORKSPACE_NAME}
     command: sleep infinity
     ports:
-      - "8545:8545" # Hardhat Network
       - "8546:8546" # Additional Blockchain Node
       - "3000:3000" # Frontend Development
       - "5000:5000" # API/Backend
       - "8080:8080" # Documentation/Other
-      - "8200:8200" # Vault API
     environment:
       - NODE_ENV=development
       - HARDHAT_NETWORK=hardhat
@@ -55,7 +53,7 @@ services:
       - VAULT_ADDR=http://vault-dev:8200
       - DIAMOND_NAME=${DIAMOND_NAME:-ExampleDiamond}
     networks:
-      - ${WORKSPACE_NAME}-network
+      - project-network
     depends_on:
       - vault-dev
       - hardhat-node
@@ -81,7 +79,7 @@ services:
       - vault-config:/vault/config
       - vault-logs:/vault/logs
     networks:
-      - ${WORKSPACE_NAME}-network
+      - project-network
     healthcheck:
       test: ["CMD", "vault", "status"]
       interval: 30s
@@ -107,7 +105,7 @@ services:
       - NODE_ENV=development
       - WORKSPACE_NAME=${WORKSPACE_NAME}
     networks:
-      - ${WORKSPACE_NAME}-network
+      - project-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8545"]
       interval: 30s
@@ -131,5 +129,5 @@ volumes:
 
 # Networks for inter-service communication
 networks:
-  ${WORKSPACE_NAME}-network:
+  project-network:
     driver: bridge

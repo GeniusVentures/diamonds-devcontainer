@@ -2,7 +2,7 @@
 
 ## Introduction/Overview
 
-The current GNUS-DAO DevContainer setup has a critical flaw where the `WORKSPACE_NAME` environment variable always defaults to `diamonds_project` despite being defined in the `.env` file. This causes issues with workspace paths, mounts, and configuration throughout the development environment. Additionally, the project currently stores secrets in `.env` files, which poses security risks.
+The current DevContainer setup has a critical flaw where the `WORKSPACE_NAME` environment variable always defaults to `diamonds_project` despite being defined in the `.env` file. This causes issues with workspace paths, mounts, and configuration throughout the development environment. Additionally, the project currently stores secrets in `.env` files, which poses security risks.
 
 This feature will migrate the DevContainer from a direct Dockerfile build to a docker-compose based setup that properly loads environment variables from `.env` files, and integrate HashiCorp Vault for secure secret management. The solution must ensure `WORKSPACE_NAME` and all environment variables are correctly propagated throughout the DevContainer lifecycle while eliminating hardcoded secrets from the repository.
 
