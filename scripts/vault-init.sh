@@ -1,5 +1,5 @@
 #!/bin/bash
-# Vault Initialization Script for GNUS-DAO DevContainer
+# Vault Initialization Script for Diamonds DevContainer
 # Initializes HashiCorp Vault dev server with GitHub authentication and policies
 
 set -e

@@ -212,7 +212,7 @@ main() {
     local env_file="${PROJECT_ROOT}/.devcontainer/.env"
     local vault_path="secret/dev"
 
-    log_info "GNUS-DAO Secret Migration to Vault"
+    log_info "Secret Migration to Vault"
     log_info "=================================="
 
     # Check if .env file exists

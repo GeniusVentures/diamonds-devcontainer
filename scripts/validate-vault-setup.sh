@@ -320,7 +320,7 @@ provide_recommendations() {
 
 # Main function
 main() {
-    log_info "GNUS-DAO Vault Setup Validation"
+    log_info "Vault Setup Validation"
     log_info "==============================="
 
     # Run all validation checks

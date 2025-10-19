@@ -77,7 +77,7 @@ check_env_file() {
 
 # Main function
 main() {
-    log_info "GNUS-DAO Secret Validation"
+    log_info "Secret Validation"
     log_info "=========================="
 
     local total_issues=0

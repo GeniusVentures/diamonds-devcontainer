@@ -96,10 +96,10 @@ prompt_input() {
 
 # Step 1: Welcome and prerequisites check
 step_welcome() {
-    log_header "GNUS-DAO Vault Setup Wizard"
+    log_header "Vault Setup Wizard"
     echo ""
     echo "This wizard will guide you through setting up HashiCorp Vault for secure"
-    echo "secret management in your GNUS-DAO development environment."
+    echo "secret management in your Diamonds development environment."
     echo ""
     echo "Prerequisites:"
     echo "  • Docker and Docker Compose installed"
@@ -426,7 +426,7 @@ main() {
 # Handle command line arguments
 case "${1:-}" in
     --help|-h)
-        echo "GNUS-DAO Vault Setup Wizard"
+        echo "Vault Setup Wizard"
         echo ""
         echo "Usage: $0 [OPTIONS]"
         echo ""
@@ -435,7 +435,7 @@ case "${1:-}" in
         echo "  --non-interactive  Run without user prompts (uses defaults)"
         echo ""
         echo "This wizard guides you through setting up HashiCorp Vault"
-        echo "for secure secret management in GNUS-DAO development."
+        echo "for secure secret management in Diamonds development."
         exit 0
         ;;
     --non-interactive)

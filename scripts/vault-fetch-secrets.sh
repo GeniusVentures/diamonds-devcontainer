@@ -1,5 +1,5 @@
 #!/bin/bash
-# Vault Secret Fetcher for GNUS-DAO DevContainer
+# Vault Secret Fetcher for Diamonds Project DevContainer
 # Retrieves secrets from HashiCorp Vault and exports them as environment variables
 
 set -e
