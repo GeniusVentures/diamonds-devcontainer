@@ -42,10 +42,13 @@ install_dependencies() {
 
         # Configure Yarn for better performance (Yarn 4.x compatible)
         yarn config set nodeLinker node-modules 2>/dev/null || log_warning "Could not set node linker"
+        
+        # Set yarn global folder to a writable location to avoid permission issues
+        yarn config set globalFolder /tmp/yarn-global 2>/dev/null || log_warning "Could not set yarn global folder"
 
         # Check if we have permission issues with .yarn directory
         if [ -d "/home/node/.yarn" ] && [ ! -w "/home/node/.yarn" ]; then
-            log_warning ".yarn directory has permission issues. This should be fixed in devcontainer.json"
+            log_warning ".yarn directory has permission issues. Using /tmp for yarn global folder instead."
         fi
 
         # Install dependencies (don't fail completely on git dependency issues)

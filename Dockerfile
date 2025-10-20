@@ -118,6 +118,11 @@ RUN git clone https://github.com/awslabs/git-secrets.git /tmp/git-secrets \
 USER node
 WORKDIR /home/node
 
+# Create .yarn directory structure with correct permissions before volume mount
+RUN mkdir -p /home/node/.yarn/cache && \
+    mkdir -p /home/node/.yarn/berry && \
+    mkdir -p /home/node/.yarn/install-state
+
 # Install Python security tools using pipx
 RUN pipx install slither-analyzer \
   && pipx install semgrep \
@@ -155,7 +160,8 @@ WORKDIR /workspaces/${WORKSPACE_NAME}
 COPY --chown=node:node package.json ./
 
 # Configure Yarn for better performance (using project-specified version via Corepack)
-RUN yarn config set cacheFolder /home/node/.yarn/cache
+RUN yarn config set cacheFolder /home/node/.yarn/cache && \
+    yarn config set globalFolder /tmp/yarn-global
 
 # Pre-install dependencies (will be overridden by post-create script)
 # Note: No yarn.lock file in repo, so installation will resolve latest compatible versions

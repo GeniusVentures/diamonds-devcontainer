@@ -18,7 +18,6 @@ services:
       - ..:/workspaces/${WORKSPACE_NAME}:cached
 
       # Cache volumes for performance
-      - yarn-cache:/home/node/.yarn/cache
       - node-modules:/workspaces/${WORKSPACE_NAME}/node_modules
       - hardhat-artifacts:/workspaces/${WORKSPACE_NAME}/artifacts
       - hardhat-cache:/workspaces/${WORKSPACE_NAME}/cache
@@ -115,7 +114,6 @@ services:
 
 # Named volumes for persistence and caching
 volumes:
-  yarn-cache:
   node-modules:
   hardhat-artifacts:
   hardhat-cache:
