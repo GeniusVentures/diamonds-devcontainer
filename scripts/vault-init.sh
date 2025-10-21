@@ -58,18 +58,24 @@ wait_for_vault() {
 setup_github_auth() {
     log_info "Setting up GitHub authentication method..."
 
-    # Enable GitHub auth method
-    vault auth enable github || {
-        log_warning "GitHub auth method already enabled"
+    # Enable GitHub auth method using HTTP API
+    curl -s -X POST \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        -d '{"type": "github"}' \
+        "$VAULT_ADDR/v1/sys/auth/github" || {
+        log_warning "GitHub auth method already enabled or failed to enable"
     }
 
     # Configure GitHub auth with organization
-    # Note: In a real setup, you would configure this with your actual organization
-    vault write auth/github/config \
-        organization="GeniusVentures" \
-        base_url="" \
-        ttl="768h" \
-        max_ttl="768h" || {
+    # TODO: This needs to be configured or picked up from git via `gh` client to supply the actual organization
+    # It shouldn't be referencing GeniusVentures directly but could also look to a variety of .env or config files including the `~/.vault_token` or `.vault_token` file in the project root.
+    curl -s -X POST \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        -d '{
+            "organization": "GeniusVentures",
+            "base_url": "https://api.github.com"
+        }' \
+        "$VAULT_ADDR/v1/auth/github/config" || {
         log_error "Failed to configure GitHub auth"
         return 1
     }
@@ -82,63 +88,43 @@ create_policies() {
     log_info "Creating Vault policies..."
 
     # Developer policy - read/write access to dev secrets
-    cat > /tmp/dev-policy.hcl << EOF
-path "secret/dev/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
-}
+    DEV_POLICY='{
+        "policy": "path \"secret/dev/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]\n}\n\npath \"secret/test/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]\n}"
+    }'
 
-path "secret/test/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
-}
-EOF
-
-    vault policy write dev-policy /tmp/dev-policy.hcl || {
+    curl -s -X PUT \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        -d "$DEV_POLICY" \
+        "$VAULT_ADDR/v1/sys/policies/acl/dev-policy" || {
         log_error "Failed to create dev policy"
         return 1
     }
 
     # CI policy - read access to all secrets, write access to ci secrets
-    cat > /tmp/ci-policy.hcl << EOF
-path "secret/ci/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
-}
+    CI_POLICY='{
+        "policy": "path \"secret/ci/*\" {\n  capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]\n}\n\npath \"secret/dev/*\" {\n  capabilities = [\"read\", \"list\"]\n}\n\npath \"secret/test/*\" {\n  capabilities = [\"read\", \"list\"]\n}"
+    }'
 
-path "secret/dev/*" {
-  capabilities = ["read", "list"]
-}
-
-path "secret/test/*" {
-  capabilities = ["read", "list"]
-}
-EOF
-
-    vault policy write ci-policy /tmp/ci-policy.hcl || {
+    curl -s -X PUT \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        -d "$CI_POLICY" \
+        "$VAULT_ADDR/v1/sys/policies/acl/ci-policy" || {
         log_error "Failed to create CI policy"
         return 1
     }
 
     # Read-only policy for external access
-    cat > /tmp/read-policy.hcl << EOF
-path "secret/dev/*" {
-  capabilities = ["read", "list"]
-}
+    READ_POLICY='{
+        "policy": "path \"secret/dev/*\" {\n  capabilities = [\"read\", \"list\"]\n}\n\npath \"secret/test/*\" {\n  capabilities = [\"read\", \"list\"]\n}\n\npath \"secret/ci/*\" {\n  capabilities = [\"read\", \"list\"]\n}"
+    }'
 
-path "secret/test/*" {
-  capabilities = ["read", "list"]
-}
-
-path "secret/ci/*" {
-  capabilities = ["read", "list"]
-}
-EOF
-
-    vault policy write read-policy /tmp/read-policy.hcl || {
+    curl -s -X PUT \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        -d "$READ_POLICY" \
+        "$VAULT_ADDR/v1/sys/policies/acl/read-policy" || {
         log_error "Failed to create read policy"
         return 1
     }
-
-    # Clean up temporary files
-    rm -f /tmp/dev-policy.hcl /tmp/ci-policy.hcl /tmp/read-policy.hcl
 
     log_success "Vault policies created"
 }
@@ -148,14 +134,18 @@ setup_github_team_mappings() {
     log_info "Setting up GitHub team to policy mappings..."
 
     # Map GeniusVentures organization members to dev-policy
-    vault write auth/github/map/teams/genius-ventures \
-        value=dev-policy || {
+    curl -s -X POST \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        -d '{"value": "dev-policy"}' \
+        "$VAULT_ADDR/v1/auth/github/map/teams/genius-ventures" || {
         log_warning "Failed to map genius-ventures team (may not exist)"
     }
 
     # Map CI/CD team to ci-policy (if it exists)
-    vault write auth/github/map/teams/ci-cd \
-        value=ci-policy || {
+    curl -s -X POST \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        -d '{"value": "ci-policy"}' \
+        "$VAULT_ADDR/v1/auth/github/map/teams/ci-cd" || {
         log_warning "Failed to map ci-cd team (may not exist)"
     }
 
@@ -167,20 +157,26 @@ initialize_secret_paths() {
     log_info "Initializing secret paths..."
 
     # Create dev secrets path with placeholder
-    vault kv put secret/dev/placeholder \
-        value="This is a placeholder secret. Replace with actual secrets." || {
+    curl -s -X POST \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        -d '{"data": {"value": "This is a placeholder secret. Replace with actual secrets."}}' \
+        "$VAULT_ADDR/v1/secret/data/dev/placeholder" || {
         log_warning "Failed to create dev placeholder secret"
     }
 
     # Create test secrets path with placeholder
-    vault kv put secret/test/placeholder \
-        value="This is a placeholder secret. Replace with actual secrets." || {
+    curl -s -X POST \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        -d '{"data": {"value": "This is a placeholder secret. Replace with actual secrets."}}' \
+        "$VAULT_ADDR/v1/secret/data/test/placeholder" || {
         log_warning "Failed to create test placeholder secret"
     }
 
     # Create ci secrets path with placeholder
-    vault kv put secret/ci/placeholder \
-        value="This is a placeholder secret. Replace with actual secrets." || {
+    curl -s -X POST \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        -d '{"data": {"value": "This is a placeholder secret. Replace with actual secrets."}}' \
+        "$VAULT_ADDR/v1/secret/data/ci/placeholder" || {
         log_warning "Failed to create CI placeholder secret"
     }
 

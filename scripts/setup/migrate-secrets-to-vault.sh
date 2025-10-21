@@ -44,20 +44,16 @@ command_exists() {
 check_vault_connection() {
     log_info "Checking Vault connectivity..."
 
-    if ! command_exists vault; then
-        log_error "Vault CLI is not installed. Please install it first."
-        exit 1
-    fi
-
     if [[ -z "${VAULT_TOKEN}" ]]; then
         log_error "VAULT_TOKEN is not set. Please authenticate with Vault first."
-        log_info "Run: vault login -method=github token=\$(gh auth token)"
+        log_info "Run: .devcontainer/scripts/setup/vault-setup-wizard.sh --non-interactive"
         exit 1
     fi
 
     export VAULT_TOKEN
 
-    if ! vault status >/dev/null 2>&1; then
+    # Check Vault health using HTTP API
+    if ! curl -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
         log_error "Cannot connect to Vault at ${VAULT_ADDR}"
         log_error "Make sure Vault is running and accessible"
         exit 1
@@ -131,16 +127,18 @@ migrate_secrets() {
         if is_secret_variable "$key" "$value"; then
             log_info "Migrating secret: ${key}"
 
-            # Store in Vault
-            if echo "$value" | vault kv put "${vault_path}/${key}" value=- >/dev/null 2>&1; then
-                log_success "Successfully migrated: ${key}"
-                ((secrets_migrated++))
-            else
+            # Store in Vault using HTTP API
+            if ! curl -s -X POST \
+                -H "X-Vault-Token: $VAULT_TOKEN" \
+                -d "{\"data\": {\"value\": \"$value\"}}" \
+                "$VAULT_ADDR/v1/secret/data/${vault_path}/${key}" >/dev/null 2>&1; then
                 log_error "Failed to migrate: ${key}"
                 exit 1
             fi
 
+            log_success "Successfully migrated: ${key}"
             ((secrets_found++))
+            ((secrets_migrated++))
         else
             # Keep non-secret variables
             non_secret_vars+=("$key=$value")
@@ -149,17 +147,36 @@ migrate_secrets() {
 
     log_info "Found ${secrets_found} secrets, migrated ${secrets_migrated} secrets"
 
-    # Create new .env file with only non-secret variables
-    {
-        echo "# .env file - Non-secret configuration only"
-        echo "# Secrets have been migrated to Vault (${vault_path})"
-        echo "# To retrieve secrets, run: .devcontainer/scripts/vault-fetch-secrets.sh"
-        echo ""
-        printf '%s\n' "${non_secret_vars[@]}"
-    } > "${env_file}.new"
+    # Only update .env file if there were secrets to migrate
+    if [[ $secrets_found -gt 0 ]]; then
+        log_info "Creating new .env file with non-secret variables..."
+        # Create new .env file with only non-secret variables
+        {
+            echo "# .env file - Non-secret configuration only"
+            echo "# Secrets have been migrated to Vault (${vault_path})"
+            echo "# To retrieve secrets, run: .devcontainer/scripts/vault-fetch-secrets.sh"
+            echo ""
+            printf '%s\n' "${non_secret_vars[@]}"
+        } > "${env_file}.new"
 
-    mv "${env_file}.new" "$env_file"
-    log_success "Updated .env file to contain only non-secret configuration"
+        log_info "Contents of .env.new:"
+        cat "${env_file}.new"
+
+        log_info "Updating .env file..."
+        # Use cat and rm instead of cp to avoid device busy issues
+        if cat "${env_file}.new" > "$env_file"; then
+            log_info "File update successful, removing temp file..."
+            rm "${env_file}.new"
+            log_success "Updated .env file to contain only non-secret configuration"
+        else
+            log_error "Failed to update .env file - permission denied or device busy"
+            log_info "You can manually update the .env file by replacing its contents with:"
+            log_info "${env_file}.new"
+            exit 1
+        fi
+    else
+        log_info "No secrets found to migrate - .env file unchanged"
+    fi
 }
 
 # Function to validate migration
@@ -192,7 +209,10 @@ validate_migration() {
 
     # Verify secrets are accessible in Vault
     local vault_secrets
-    vault_secrets=$(vault kv list "$vault_path" 2>/dev/null | tail -n +3 || echo "")
+    vault_secrets=$(curl -s \
+        -H "X-Vault-Token: $VAULT_TOKEN" \
+        "$VAULT_ADDR/v1/secret/metadata/${vault_path}?list=true" | \
+        jq -r '.data.keys[]' 2>/dev/null || echo "")
 
     if [[ -z "$vault_secrets" ]]; then
         log_warning "No secrets found in Vault path: ${vault_path}"
@@ -209,7 +229,7 @@ validate_migration() {
 
 # Main function
 main() {
-    local env_file="${PROJECT_ROOT}/.devcontainer/.env"
+    local env_file="${PROJECT_ROOT}/.env"
     local vault_path="secret/dev"
 
     log_info "Secret Migration to Vault"
@@ -230,6 +250,8 @@ main() {
 
     # Migrate secrets
     migrate_secrets "$env_file" "$vault_path"
+
+    log_info "Migration completed, starting validation..."
 
     # Validate migration
     validate_migration "$env_file" "$vault_path"

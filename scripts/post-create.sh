@@ -312,7 +312,7 @@ fetch_vault_secrets() {
 
 # Function to display next steps
 display_next_steps() {
-    log_success "Diamonds DevContainer setup completed!"
+    log_success "Diamonds DevContainer post-create setup completed!"
     echo
     log_info "Next steps:"
     echo "  1. Run 'yarn test' to execute the test suite"
@@ -328,6 +328,8 @@ display_next_steps() {
     echo "  yarn lint         - Run linting"
     echo "  yarn security-check - Run security scans"
     echo "  npx hardhat help  - Show Hardhat commands"
+    echo
+    echo "If run during DevContainer creation, post-start setup should run automatically."
 }
 
 # Main execution

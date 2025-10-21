@@ -21,7 +21,7 @@ NC='\033[0m' # No Color
 
 # Wizard state
 STEP=1
-TOTAL_STEPS=8
+TOTAL_STEPS=9
 
 # Logging functions
 log_info() {
@@ -48,6 +48,22 @@ log_header() {
     echo -e "${CYAN}================================================================================${NC}"
     echo -e "${CYAN}$1${NC}"
     echo -e "${CYAN}================================================================================${NC}"
+}
+
+# Function to check if running in a container
+is_running_in_container() {
+    # Check for common container indicators
+    [[ -f /.dockerenv ]] || [[ -f /run/.containerenv ]] || grep -q 'docker\|containerd\|podman' /proc/1/cgroup 2>/dev/null || [[ -n "${CONTAINER:-}" ]]
+}
+
+# Function to check Vault connectivity
+check_vault_connectivity() {
+    if command -v curl >/dev/null 2>&1; then
+        if curl -s --max-time 5 "${VAULT_ADDR}/v1/sys/health" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
 }
 
 # Function to check if command exists
@@ -101,16 +117,27 @@ step_welcome() {
     echo "This wizard will guide you through setting up HashiCorp Vault for secure"
     echo "secret management in your Diamonds development environment."
     echo ""
-    echo "Prerequisites:"
-    echo "  • Docker and Docker Compose installed"
-    echo "  • GitHub account with repository access"
-    echo "  • GitHub Personal Access Token (will be created if needed)"
+
+    if is_running_in_container; then
+        echo "Running in DevContainer environment - Vault service integration detected."
+        echo ""
+        echo "Prerequisites:"
+        echo "  • GitHub account with repository access"
+        echo "  • GitHub Personal Access Token (will be created if needed)"
+        echo "  • curl for HTTP requests"
+    else
+        echo "Prerequisites:"
+        echo "  • Docker and Docker Compose installed"
+        echo "  • GitHub account with repository access"
+        echo "  • GitHub Personal Access Token (will be created if needed)"
+    fi
     echo ""
 
     if ! prompt_yes_no "Do you want to continue with the Vault setup?"; then
         log_info "Setup cancelled by user"
         exit 0
     fi
+
 
     ((STEP++))
 }
@@ -121,22 +148,43 @@ step_check_prerequisites() {
 
     local all_good=true
 
-    # Check Docker
-    if command_exists docker; then
-        log_success "Docker is installed"
+    if is_running_in_container; then
+        log_info "Running in containerized environment - adapting checks..."
+
+        # In DevContainer, check for Vault connectivity instead of Docker tools
+        if check_vault_connectivity; then
+            log_success "Vault service is accessible at $VAULT_ADDR"
+        else
+            log_warning "Vault service not yet accessible - will be configured"
+        fi
+
+        # Check curl for HTTP requests
+        if command_exists curl; then
+            log_success "curl is available for HTTP requests"
+        else
+            log_error "curl is not available"
+            all_good=false
+        fi
     else
-        log_error "Docker is not installed"
-        all_good=false
+        # Original checks for non-containerized environment
+        # Check Docker
+        if command_exists docker; then
+            log_success "Docker is installed"
+        else
+            log_error "Docker is not installed"
+            all_good=false
+        fi
+
+        # Check Docker Compose
+        if command_exists docker-compose; then
+            log_success "Docker Compose is installed"
+        else
+            log_error "Docker Compose is not installed"
+            all_good=false
+        fi
     fi
 
-    # Check Docker Compose
-    if command_exists docker-compose; then
-        log_success "Docker Compose is installed"
-    else
-        log_error "Docker Compose is not installed"
-        all_good=false
-    fi
-
+    # Common checks for both environments
     # Check GitHub CLI
     if command_exists gh; then
         log_success "GitHub CLI is installed"
@@ -169,6 +217,10 @@ step_configure_vault() {
 
     VAULT_ADDR=$(prompt_input "Vault server address" "$VAULT_ADDR")
     export VAULT_ADDR
+
+    # Set default token for development mode
+    VAULT_TOKEN="${VAULT_TOKEN:-root}"
+    export VAULT_TOKEN
 
     log_success "Vault address set to: $VAULT_ADDR"
 
@@ -223,30 +275,58 @@ step_github_auth() {
 step_start_vault() {
     log_step $STEP "Starting Vault Service"
 
-    echo "Starting Vault development server..."
-    echo ""
+    if is_running_in_container; then
+        echo "Running in DevContainer environment - checking Vault service..."
+        echo ""
 
-    if ! docker-compose ps vault-dev | grep -q "Up"; then
-        log_info "Starting Vault container..."
-        docker-compose up -d vault-dev
+        # In DevContainer, Vault should already be running as a service
+        if check_vault_connectivity; then
+            log_success "Vault service is running and accessible at $VAULT_ADDR"
+        else
+            log_warning "Vault service not yet accessible. Waiting..."
+            local retries=30
+            while [[ $retries -gt 0 ]]; do
+                if check_vault_connectivity; then
+                    log_success "Vault service is now accessible"
+                    break
+                fi
+                log_info "Waiting for Vault service... ($retries attempts remaining)"
+                sleep 2
+                ((retries--))
+            done
 
-        # Wait for Vault to be ready
-        log_info "Waiting for Vault to initialize..."
-        local retries=30
-        while [[ $retries -gt 0 ]]; do
-            if curl -s "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
-                break
+            if [[ $retries -eq 0 ]]; then
+                log_error "Vault service failed to become accessible within 60 seconds"
+                log_info "Please check that the vault-dev service is running in docker-compose"
+                exit 1
             fi
-            sleep 2
-            ((retries--))
-        done
-
-        if [[ $retries -eq 0 ]]; then
-            log_error "Vault failed to start within 60 seconds"
-            exit 1
         fi
     else
-        log_success "Vault container is already running"
+        echo "Starting Vault development server..."
+        echo ""
+
+        if ! docker-compose ps vault-dev | grep -q "Up"; then
+            log_info "Starting Vault container..."
+            docker-compose up -d vault-dev
+
+            # Wait for Vault to be ready
+            log_info "Waiting for Vault to initialize..."
+            local retries=30
+            while [[ $retries -gt 0 ]]; do
+                if curl -s "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
+                    break
+                fi
+                sleep 2
+                ((retries--))
+            done
+
+            if [[ $retries -eq 0 ]]; then
+                log_error "Vault failed to start within 60 seconds"
+                exit 1
+            fi
+        else
+            log_success "Vault container is already running"
+        fi
     fi
 
     log_success "Vault service is ready"
@@ -266,7 +346,7 @@ step_initialize_vault() {
         log_success "Vault is already initialized"
     else
         # Run vault-init.sh
-        local init_script="./scripts/vault-init.sh"
+        local init_script="./.devcontainer/scripts/vault-init.sh"
         if [[ -f "$init_script" ]]; then
             log_info "Running Vault initialization script..."
             if "$init_script"; then
@@ -291,14 +371,29 @@ step_authenticate() {
     echo "Authenticating with Vault using GitHub token..."
     echo ""
 
-    if vault token lookup >/dev/null 2>&1; then
-        log_success "Already authenticated with Vault"
+    # Check if we already have a valid token by trying to access sys/health
+    if curl -s -H "X-Vault-Token: $VAULT_TOKEN" "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
+        log_success "Already authenticated with Vault (using root token)"
     else
-        if vault login -method=github token="$GITHUB_TOKEN" >/dev/null 2>&1; then
-            log_success "Successfully authenticated with Vault"
+        # Try to authenticate with GitHub token
+        AUTH_RESPONSE=$(curl -s -X POST \
+            -d "{\"token\": \"$GITHUB_TOKEN\"}" \
+            "$VAULT_ADDR/v1/auth/github/login")
+
+        if echo "$AUTH_RESPONSE" | grep -q '"auth"'; then
+            # Extract the client token from the response
+            CLIENT_TOKEN=$(echo "$AUTH_RESPONSE" | grep -o '"client_token":"[^"]*' | cut -d'"' -f4)
+            if [ -n "$CLIENT_TOKEN" ]; then
+                export VAULT_TOKEN="$CLIENT_TOKEN"
+                log_success "Successfully authenticated with Vault using GitHub token"
+            else
+                log_error "Failed to extract client token from authentication response"
+                exit 1
+            fi
         else
             log_error "Vault authentication failed"
             log_info "Check your GitHub token and try again"
+            log_info "Auth response: $AUTH_RESPONSE"
             exit 1
         fi
     fi
@@ -323,7 +418,7 @@ step_migrate_secrets() {
         log_info "You can add secrets to Vault manually using: vault kv put secret/dev/KEY value=VALUE"
     else
         if prompt_yes_no "Ready to migrate secrets from .env to Vault?"; then
-            local migrate_script="./scripts/setup/migrate-secrets-to-vault.sh"
+            local migrate_script="./.devcontainer/scripts/setup/migrate-secrets-to-vault.sh"
             if [[ -f "$migrate_script" ]]; then
                 log_info "Running secret migration..."
                 if "$migrate_script"; then
@@ -338,7 +433,7 @@ step_migrate_secrets() {
             fi
         else
             log_info "Secret migration skipped"
-            log_info "You can run it later with: ./scripts/setup/migrate-secrets-to-vault.sh"
+            log_info "You can run it later with: ./.devcontainer/scripts/setup/migrate-secrets-to-vault.sh"
         fi
     fi
 
@@ -352,28 +447,46 @@ step_final_verification() {
     echo "Running final verification of your Vault setup..."
     echo ""
 
-    local verify_script="./scripts/validate-vault-setup.sh"
-    if [[ -f "$verify_script" ]]; then
-        if "$verify_script"; then
+    # Prefer the more comprehensive validate script in the setup/ folder
+    local verify_script_setup=".devcontainer/scripts/setup/validate-vault-setup.sh"
+    local verify_script_root=".devcontainer/scripts/validate-vault-setup.sh"
+
+    if [[ -f "$verify_script_setup" ]]; then
+        if env VAULT_ADDR="$VAULT_ADDR" VAULT_TOKEN="$VAULT_TOKEN" bash "$verify_script_setup"; then
+            log_success "Vault setup verification passed!"
+        else
+            log_warning "Some verification checks failed"
+            log_info "Check the output above for details"
+        fi
+    elif [[ -f "$verify_script_root" ]]; then
+        if env VAULT_ADDR="$VAULT_ADDR" VAULT_TOKEN="$VAULT_TOKEN" bash "$verify_script_root"; then
             log_success "Vault setup verification passed!"
         else
             log_warning "Some verification checks failed"
             log_info "Check the output above for details"
         fi
     else
-        log_warning "Verification script not found - running basic checks"
+        log_warning "Verification script not found - running HTTP basic checks"
 
-        # Basic checks
-        if vault status >/dev/null 2>&1; then
-            log_success "Vault is accessible"
+        # Basic HTTP checks (no Vault CLI required)
+        local healthy=false
+        if curl -s --max-time 3 "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
+            log_success "Vault is reachable at $VAULT_ADDR"
+            healthy=true
         else
-            log_error "Vault is not accessible"
+            log_error "Vault is not accessible at $VAULT_ADDR"
         fi
 
-        if vault kv list secret/dev >/dev/null 2>&1; then
-            log_success "Secrets are accessible"
-        else
-            log_warning "Secrets may not be accessible"
+        # Check that secrets path has entries (KV v2 metadata list)
+        if $healthy; then
+            local list_resp
+            list_resp=$(curl -s -H "X-Vault-Token: ${VAULT_TOKEN:-}" "$VAULT_ADDR/v1/secret/metadata/dev?list=true" 2>/dev/null || echo "")
+            if echo "$list_resp" | grep -q 'keys\|"keys"'; then
+                log_success "Secrets appear to be present under secret/dev"
+                log_success "Vault setup verification passed!"
+            else
+                log_warning "No keys returned from secret/dev metadata; secrets may not be present"
+            fi
         fi
     fi
 
@@ -455,7 +568,7 @@ case "${1:-}" in
         prompt_yes_no() { return 0; }  # Always yes
         prompt_input() {
             local prompt="$1"
-            local default="$2"
+            local default="${2:-}"
             echo "$default"
         }
 
