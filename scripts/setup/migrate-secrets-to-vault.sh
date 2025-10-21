@@ -88,7 +88,7 @@ is_secret_variable() {
 # Function to backup .env file
 create_backup() {
     local env_file="$1"
-    local backup_file="${env_file}.vault-migrated.$(date +%Y%m%d_%H%M%S)"
+    local backup_file="logs/${env_file}.vault-migrated.$(date +%Y%m%d_%H%M%S)"
 
     log_info "Creating backup of .env file: ${backup_file}"
     cp "$env_file" "$backup_file"
