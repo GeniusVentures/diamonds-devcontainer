@@ -282,7 +282,7 @@ verify_environment() {
 fetch_vault_secrets() {
     log_info "Fetching secrets from HashiCorp Vault..."
 
-    local vault_script="./scripts/vault-fetch-secrets.sh"
+    local vault_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/vault-fetch-secrets.sh"
 
     if [[ -f "$vault_script" ]]; then
         if [[ -x "$vault_script" ]]; then

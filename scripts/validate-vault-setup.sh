@@ -302,7 +302,7 @@ check_env_priority() {
     log_info "This is implemented in vault-fetch-secrets.sh"
 
     # Check if vault-fetch-secrets.sh exists and is executable
-    local fetch_script="./scripts/vault-fetch-secrets.sh"
+    local fetch_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/vault-fetch-secrets.sh"
     if [[ -f "$fetch_script" ]] && [[ -x "$fetch_script" ]]; then
         log_success "Secret fetching script is available"
         return 0

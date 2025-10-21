@@ -346,7 +346,8 @@ step_initialize_vault() {
         log_success "Vault is already initialized"
     else
         # Run vault-init.sh
-        local init_script="./.devcontainer/scripts/vault-init.sh"
+        echo "Current directory: $(pwd)"
+        local init_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/vault-init.sh"
         if [[ -f "$init_script" ]]; then
             log_info "Running Vault initialization script..."
             if "$init_script"; then
@@ -418,7 +419,7 @@ step_migrate_secrets() {
         log_info "You can add secrets to Vault manually using: vault kv put secret/dev/KEY value=VALUE"
     else
         if prompt_yes_no "Ready to migrate secrets from .env to Vault?"; then
-            local migrate_script="./.devcontainer/scripts/setup/migrate-secrets-to-vault.sh"
+            local migrate_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/setup/migrate-secrets-to-vault.sh"
             if [[ -f "$migrate_script" ]]; then
                 log_info "Running secret migration..."
                 if "$migrate_script"; then
@@ -448,8 +449,8 @@ step_final_verification() {
     echo ""
 
     # Prefer the more comprehensive validate script in the setup/ folder
-    local verify_script_setup=".devcontainer/scripts/setup/validate-vault-setup.sh"
-    local verify_script_root=".devcontainer/scripts/validate-vault-setup.sh"
+    local verify_script_setup="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/setup/validate-vault-setup.sh"
+    local verify_script_root="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/validate-vault-setup.sh"
 
     if [[ -f "$verify_script_setup" ]]; then
         if env VAULT_ADDR="$VAULT_ADDR" VAULT_TOKEN="$VAULT_TOKEN" bash "$verify_script_setup"; then

@@ -1,6 +1,8 @@
 {
   "name": "Diamonds Development Environment",
-  "dockerComposeFile": ["docker-compose.dev.yml"],
+  "dockerComposeFile": [
+    "docker-compose.dev.yml"
+  ],
   "service": "devcontainer",
   "workspaceFolder": "/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}",
   "customizations": {
@@ -20,7 +22,6 @@
         "usernamehw.errorlens",
         "github.vscode-github-actions",
         "ms-python.python",
-        "golang.Go",
         "ms-vscode.vscode-markdown",
         "redhat.vscode-yaml",
         "ms-vscode.vscode-git-graph",

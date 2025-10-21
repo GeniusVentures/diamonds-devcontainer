@@ -297,7 +297,7 @@ auto_detect_vault_status() {
     if command -v vault >/dev/null 2>&1 && [[ -n "${VAULT_ADDR:-}" ]]; then
         if ! vault status >/dev/null 2>&1; then
             vault_configured=false
-            recommendations+=("Initialize Vault: ./.devcontainer/scripts/vault-init.sh")
+            recommendations+=("Initialize Vault: /workspaces/$WORKSPACE_NAME/.devcontainer/scripts/vault-init.sh")
         elif ! vault token lookup >/dev/null 2>&1; then
             vault_configured=false
             recommendations+=("Authenticate with Vault: vault login -method=github token=\$GITHUB_TOKEN")
@@ -334,15 +334,15 @@ auto_detect_vault_status() {
 
         # Offer to run setup wizard
         echo ""
-        if [[ -t 0 ]] && [[ -f "./.devcontainer/scripts/setup/vault-setup-wizard.sh" ]]; then
+        if [[ -t 0 ]] && [[ -f "/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/setup/vault-setup-wizard.sh" ]]; then
             echo -e "${YELLOW}Would you like to run the interactive setup wizard? (y/N): ${NC}\c"
             read -r response
             if [[ "$response" =~ ^[Yy]$ ]]; then
                 log_info "Starting Vault setup wizard..."
-                ./.devcontainer/scripts/setup/vault-setup-wizard.sh
+                /workspaces/$WORKSPACE_NAME/.devcontainer/scripts/setup/vault-setup-wizard.sh
             fi
         else
-            log_info "Run setup wizard: ./.devcontainer/scripts/setup/vault-setup-wizard.sh"
+            log_info "Run setup wizard: .devcontainer/scripts/setup/vault-setup-wizard.sh"
         fi
     fi
 }
@@ -351,7 +351,7 @@ auto_detect_vault_status() {
 refresh_vault_secrets() {
     log_info "Checking for updated Vault secrets..."
 
-    local vault_script="./scripts/vault-fetch-secrets.sh"
+    local vault_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/vault-fetch-secrets.sh"
     local last_refresh_file="/tmp/vault-secrets-last-refresh"
 
     # Check if vault script exists
