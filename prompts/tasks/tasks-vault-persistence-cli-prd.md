@@ -1610,8 +1610,8 @@
 ### Phase 5: Documentation & Polish (Week 5)
 
 
-- [ ] **13.0 Update Documentation**
-  - [ ] 13.1 Create `.devcontainer/docs/VAULT_CLI.md` with CLI installation details
+- [x] **13.0 Update Documentation**
+  - [x] 13.1 Create `.devcontainer/docs/VAULT_CLI.md` with CLI installation details
     - Create comprehensive documentation file:
       ```markdown
       # Vault CLI Installation
@@ -1640,13 +1640,13 @@
       ```
     - Include examples for all major operations
     - Add troubleshooting section with common errors
-  - [ ] 13.2 Update `.devcontainer/docs/VAULT_SETUP.md` - add persistence overview section
+  - [x] 13.2 Update `.devcontainer/docs/VAULT_SETUP.md` - add persistence overview section
     - Add new sections at top:
       - "Vault Persistence Modes" (ephemeral vs persistent)
       - "Storage Backend Configuration" (Raft details)
       - Include table comparing modes
       - Add architecture diagram (ASCII art)
-  - [ ] 13.3 Update `.devcontainer/docs/VAULT_SETUP.md` - add mode switching guide
+  - [x] 13.3 Update `.devcontainer/docs/VAULT_SETUP.md` - add mode switching guide
     - Add section "Switching Between Modes":
       ```markdown
       ## Mode Switching
@@ -1663,14 +1663,14 @@
       3. Secrets restored to new backend
       4. Old backup retained (last 5 kept)
       ```
-  - [ ] 13.4 Update `.devcontainer/docs/VAULT_SETUP.md` - add seal/unseal workflows
+  - [x] 13.4 Update `.devcontainer/docs/VAULT_SETUP.md` - add seal/unseal workflows
     - Add section "Seal/Unseal Management":
       - Manual unseal procedure (3 of 5 keys)
       - Auto-unseal configuration
       - Key storage location and security warnings
       - Sealing: `vault operator seal`
       - Unsealing: `vault operator unseal` (3 times)
-  - [ ] 13.5 Update `.devcontainer/docs/VAULT_SETUP.md` - add template setup guide
+  - [x] 13.5 Update `.devcontainer/docs/VAULT_SETUP.md` - add template setup guide
     - Add section "Team Templates":
       ```markdown
       ## Creating Team Templates
@@ -1688,20 +1688,20 @@
       - Run wizard, select "Initialize from template"
       - Replace placeholder values
       ```
-  - [ ] 13.6 Update `.devcontainer/docs/VAULT_SETUP.md` - add troubleshooting section
+  - [x] 13.6 Update `.devcontainer/docs/VAULT_SETUP.md` - add troubleshooting section
     - Add common issues:
       - Vault sealed after restart
       - CLI not found in PATH
       - Raft database corruption
       - Migration failures
     - Include solutions and workarounds
-  - [ ] 13.7 Add architecture diagrams (system architecture, state machine)
+  - [x] 13.7 Add architecture diagrams (system architecture, state machine)
     - Create ASCII art diagram showing:
       - Container → Vault → Storage Backend flow
       - Seal/Unseal state machine
       - Migration process flow
     - Add to VAULT_SETUP.md
-  - [ ] 13.8 Document backup/restore procedures
+  - [x] 13.8 Document backup/restore procedures
     - Add section on manual backup:
       ```bash
       cp -r .devcontainer/data/vault-data .devcontainer/data/vault-data-backup-$(date +%Y%m%d)
