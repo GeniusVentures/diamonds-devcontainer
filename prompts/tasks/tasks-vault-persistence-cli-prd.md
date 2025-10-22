@@ -1561,47 +1561,47 @@
     - Include git commands for committing template
     - Explain .gitignore patterns
 
-- [ ] **12.0 Integration Testing - All Workflows**
-  - [ ] 12.1 Test fresh setup with persistent mode selected
+- [x] **12.0 Integration Testing - All Workflows**
+  - [x] 12.1 Test fresh setup with persistent mode selected
     - Start from clean state (no vault-data, no config)
     - Run wizard, select persistent mode
     - Complete full setup
     - Verify Vault operational, secrets persist after restart
-  - [ ] 12.2 Test fresh setup with ephemeral mode selected
+  - [x] 12.2 Test fresh setup with ephemeral mode selected
     - Clean state
     - Run wizard, select ephemeral
     - Complete setup
     - Verify secrets accessible immediately, lost on restart
-  - [ ] 12.3 Test template initialization from wizard
+  - [x] 12.3 Test template initialization from wizard
     - Create template with seed secrets
     - Run wizard
     - Select template initialization
     - Verify seed secrets loaded correctly
-  - [ ] 12.4 Test mode switching (persistent → ephemeral → persistent)
+  - [x] 12.4 Test mode switching (persistent → ephemeral → persistent)
     - Start in persistent with secrets
     - Switch to ephemeral: `vault-mode switch ephemeral`
     - Verify migration prompt, complete migration
     - Verify secrets in ephemeral mode
     - Switch back to persistent
     - Verify secrets restored
-  - [ ] 12.5 Test auto-unseal workflow (seal → restart → auto-unseal)
+  - [x] 12.5 Test auto-unseal workflow (seal → restart → auto-unseal)
     - Enable auto-unseal in config
     - Seal Vault: `vault operator seal`
     - Restart container
     - Verify Vault auto-unseals
     - Verify secrets accessible
-  - [ ] 12.6 Test manual unseal workflow (seal → restart → manual unseal)
+  - [x] 12.6 Test manual unseal workflow (seal → restart → manual unseal)
     - Disable auto-unseal
     - Seal Vault
     - Restart container
     - Follow manual unseal instructions
     - Verify unsealing successful
-  - [ ] 12.7 Test validation in all configurations
+  - [x] 12.7 Test validation in all configurations
     - Run validation with ephemeral mode
     - Run validation with persistent mode (sealed)
     - Run validation with persistent mode (unsealed)
     - Verify all checks pass/warn appropriately
-  - [ ] 12.8 Test secret persistence across container rebuilds
+  - [x] 12.8 Test secret persistence across container rebuilds
     - Write test secrets to persistent Vault
     - Rebuild DevContainer completely
     - Unseal Vault
