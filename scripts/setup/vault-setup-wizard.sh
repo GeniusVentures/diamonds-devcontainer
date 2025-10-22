@@ -21,7 +21,7 @@ NC='\033[0m' # No Color
 
 # Wizard state
 STEP=1
-TOTAL_STEPS=11  # Increased from 10 to include auto-unseal configuration
+TOTAL_STEPS=12  # Increased from 11 to include template initialization
 
 # Logging functions
 log_info() {
@@ -585,7 +585,50 @@ step_authenticate() {
     ((STEP++))
 }
 
-# Step 8: Migrate secrets
+# Step 8: Template initialization (if available)
+step_template_initialization() {
+    log_step $STEP "Team Template Detection"
+
+    local template_dir=".devcontainer/data/vault-data.template"
+    local init_script=".devcontainer/scripts/vault-init-from-template.sh"
+
+    if [[ -d "$template_dir" && -f "$init_script" ]]; then
+        log_info "Vault team template detected!"
+        echo ""
+        echo "A team template with pre-configured secrets has been found."
+        echo "This template can help you get started quickly with placeholder"
+        echo "secrets for common development needs."
+        echo ""
+        
+        if prompt_yes_no "Initialize from template?" "yes"; then
+            log_info "Running template initialization..."
+            echo ""
+            
+            # Run the template initialization script
+            if bash "$init_script"; then
+                log_success "Template initialization completed!"
+                echo ""
+                log_warning "Remember to replace placeholder values with actual secrets:"
+                echo "  vault kv put secret/dev/DEFENDER_API_KEY value=\"YOUR_KEY\""
+                echo "  vault kv put secret/dev/ETHERSCAN_API_KEY value=\"YOUR_KEY\""
+                echo ""
+            else
+                log_warning "Template initialization encountered an error"
+                log_info "You can run it manually later: bash $init_script"
+            fi
+        else
+            log_info "Skipping template initialization"
+            echo ""
+        fi
+    else
+        log_info "No team template found (this is optional)"
+        echo ""
+    fi
+
+    ((STEP++))
+}
+
+# Step 9: Migrate secrets
 step_migrate_secrets() {
     log_step $STEP "Migrating Secrets to Vault"
 
@@ -716,6 +759,7 @@ main() {
     step_start_vault
     step_initialize_vault
     step_authenticate
+    step_template_initialization
     step_migrate_secrets
     step_final_verification
 

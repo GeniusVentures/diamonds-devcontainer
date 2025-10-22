@@ -1441,8 +1441,8 @@
     - Unsealed: Verify success message
     - Verify raft storage detection works
 
-- [ ] **11.0 Create Team Template System**
-  - [ ] 11.1 Create `.devcontainer/data/vault-data.template/README.md` with setup instructions
+- [x] **11.0 Create Team Template System**
+  - [x] 11.1 Create `.devcontainer/data/vault-data.template/README.md` with setup instructions
     - Create file with comprehensive instructions:
       ```markdown
       # Vault Template Setup
@@ -1468,7 +1468,7 @@
       3. Copy vault-data to vault-data.template
       4. Commit template to Git (actual vault-data is gitignored)
       ```
-  - [ ] 11.2 Create `.devcontainer/data/vault-data.template/seed-secrets.json` with placeholder secrets
+  - [x] 11.2 Create `.devcontainer/data/vault-data.template/seed-secrets.json` with placeholder secrets
     - Create JSON file with all required secrets:
       ```json
       {
@@ -1490,7 +1490,7 @@
       }
       ```
     - Include comments about required scopes/permissions
-  - [ ] 11.3 Create `.devcontainer/scripts/vault-init-from-template.sh` script
+  - [x] 11.3 Create `.devcontainer/scripts/vault-init-from-template.sh` script
     - Create file: `touch .devcontainer/scripts/vault-init-from-template.sh`
     - Make executable: `chmod +x .devcontainer/scripts/vault-init-from-template.sh`
     - Implement script:
@@ -1532,7 +1532,7 @@
           echo "[SUCCESS] Seed secrets loaded"
       fi
       ```
-  - [ ] 11.4 Implement template detection in wizard (prompt user if found)
+  - [x] 11.4 Implement template detection in wizard (prompt user if found)
     - Add to wizard after mode selection:
       ```bash
       if [[ -d .devcontainer/data/vault-data.template ]]; then
@@ -1545,18 +1545,18 @@
           fi
       fi
       ```
-  - [ ] 11.5 Implement seed secret loading (parse JSON, write to Vault)
+  - [x] 11.5 Implement seed secret loading (parse JSON, write to Vault)
     - Already included in vault-init-from-template.sh above
     - Test parsing and loading
-  - [ ] 11.6 Add overwrite protection (warn if vault-data exists)
+  - [x] 11.6 Add overwrite protection (warn if vault-data exists)
     - Already included in script above
     - Test warning appears correctly
-  - [ ] 11.7 Test template initialization workflow
+  - [x] 11.7 Test template initialization workflow
     - Create seed-secrets.json with test data
     - Run wizard with template present
     - Select "Initialize from template"
     - Verify secrets loaded in Vault
-  - [ ] 11.8 Document how teams can create and share templates
+  - [x] 11.8 Document how teams can create and share templates
     - Add to VAULT_SETUP.md (will be done in Phase 5)
     - Include git commands for committing template
     - Explain .gitignore patterns
