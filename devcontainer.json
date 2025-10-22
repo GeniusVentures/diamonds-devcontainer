@@ -62,6 +62,7 @@
   "forwardPorts": [
     8545,
     8546,
+    8200,
     3000,
     5000,
     8080
@@ -74,6 +75,10 @@
     "8546": {
       "label": "Additional Blockchain Node",
       "onAutoForward": "silent"
+    },
+    "8200": {
+      "label": "Vault Server",
+      "onAutoForward": "notify"
     },
     "3000": {
       "label": "Frontend Development",
@@ -92,7 +97,9 @@
     "REPORT_GAS": "false",
     "PYTHONUNBUFFERED": "1",
     "PIP_DISABLE_PIP_VERSION_CHECK": "1",
-    "DIAMOND_NAME": "${localEnv:DIAMOND_NAME:ExampleDiamond}"
+    "DIAMOND_NAME": "${localEnv:DIAMOND_NAME:ExampleDiamond}",
+    "VAULT_ADDR": "http://vault-dev:8200",
+    "VAULT_SKIP_VERIFY": "true"
   },
   "remoteUser": "node",
   "overrideCommand": false,
