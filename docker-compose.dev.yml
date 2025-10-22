@@ -64,7 +64,7 @@ services:
       start_period: 60s
 
   # HashiCorp Vault Dev Server for secure secret management
-  # 
+  #
   # Environment Variables (from .env file):
   #   VAULT_COMMAND - Controls Vault mode:
   #     - Ephemeral (default): server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200
@@ -90,10 +90,10 @@ services:
     volumes:
       # Config file for persistent mode (conditionally used)
       - ./config/vault-persistent.hcl:/vault/config/vault-persistent.hcl:ro
-      
+
       # Persistent storage (bind mount to host, conditionally used)
       - ./data/vault-data:/vault/data
-      
+
       # Logs (always available)
       - vault-logs:/vault/logs
     cap_add:
