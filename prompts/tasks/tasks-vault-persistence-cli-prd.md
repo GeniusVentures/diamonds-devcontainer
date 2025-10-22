@@ -1311,43 +1311,88 @@
 
 ### Phase 4: Validation & Templates (Week 4)
 
-- [ ] **10.0 Extend Validation Script for Persistent Mode**
-  - [ ] 10.1 Add `check_vault_mode()` function to validate-vault-setup.sh
-    - Open `.devcontainer/scripts/validate-vault-setup.sh`
-    - Add new function after existing checks:
-      ```bash
-      check_vault_mode() {
-          echo -n "[INFO] Detecting Vault storage mode... "
-          
-          if [[ -f .devcontainer/data/vault-mode.conf ]]; then
-              source .devcontainer/data/vault-mode.conf
-              echo "[$VAULT_MODE mode]"
-              
-              if [[ "$VAULT_MODE" == "persistent" ]]; then
-                  # Additional checks for persistent mode
-                  check_vault_seal_status
-                  check_persistent_storage
-              else
-                  echo "[INFO] Using ephemeral dev mode (data not persistent)"
-              fi
-          else
-              echo "[ephemeral/dev mode - no config found]"
-              echo "[INFO] Vault running in default ephemeral mode"
-          fi
-      }
-      ```
-    - Call this function in main validation sequence
-  - [ ] 10.2 Implement seal status detection (HTTP API: /v1/sys/seal-status)
-    - Add function:
-      ```bash
-      check_vault_seal_status() {
-          local seal_status=$(curl -s "$VAULT_ADDR/v1/sys/seal-status" | jq -r '.sealed' 2>/dev/null || echo "error")
-          
-          if [[ "$seal_status" == "true" ]]; then
-              echo "[WARNING] Vault is SEALED - unsealing required"
-              echo "[INFO] Unseal command: vault operator unseal"
-              echo "[INFO] Keys location: .devcontainer/data/vault-unseal-keys.json"
-              CHECKS_WARNING=$((CHECKS_WARNING + 1))
+- [x] **10.0 Extend Validation Script for Persistent Mode**
+  **Commit**: (pending) - feat: extend validation script for persistent mode
+  **Summary**: Enhanced validation script with comprehensive persistent mode checks
+  - Added 5 new validation functions for persistent mode support
+  - Seal status detection and warnings
+  - Persistent storage (raft) validation
+  - Unseal keys file validation with security checks
+  - Configuration consistency detection
+  - Comprehensive test suite: test-validate-vault-extended.sh (22 tests passing)
+  **Files Modified**: validate-vault-setup.sh
+  **Files Added**: test-validate-vault-extended.sh
+  - [x] 10.1 Add `check_vault_mode()` function to validate-vault-setup.sh
+    **Implementation**: Added check_vault_mode() function
+    - Detects vault mode from vault-mode.conf
+    - Handles persistent and ephemeral modes
+    - Calls additional checks for persistent mode
+    - Provides informational messages for ephemeral mode
+    - Gracefully handles missing config file
+  - [x] 10.2 Implement seal status detection (HTTP API: /v1/sys/seal-status)
+    **Implementation**: Added check_vault_seal_status() function
+    - Uses Vault HTTP API endpoint: /v1/sys/seal-status
+    - Detects sealed/unsealed state via JSON parsing
+    - Warns when Vault is sealed with instructions
+    - Confirms when Vault is unsealed and operational
+    - Provides quick unseal command
+    - Provides manual step-by-step process
+    - Shows unseal keys file location
+  - [x] 10.3 Implement persistent storage check (verify raft database exists)
+    **Implementation**: Added check_persistent_storage() function
+    - Validates raft directory exists
+    - Reports database size using du -sh
+    - Counts raft database files
+    - Detects missing persistent storage
+    - Provides troubleshooting information
+    - Warns about potential initialization needs
+  - [x] 10.4 Add warnings for sealed Vault with unseal instructions
+    **Implementation**: Comprehensive unseal instructions
+    - Quick one-liner unseal command
+    - Manual 3-step unseal process
+    - Auto-unseal script reference
+    - Keys file location display
+    - All integrated in check_vault_seal_status()
+  - [x] 10.5 Add error detection for misconfigured persistent mode
+    **Implementation**: Added check_config_consistency() function
+    - Detects persistent mode without raft data
+    - Detects ephemeral mode with existing raft data
+    - Warns about configuration mismatches
+    - Provides actionable recommendations
+    - Suggests mode switching or data cleanup
+  - [x] 10.6 Added check_unseal_keys() function
+    **Implementation**: Comprehensive unseal keys validation
+    - Verifies unseal keys file exists
+    - Checks file permissions (should be 600)
+    - Validates JSON structure with jq
+    - Counts available unseal keys
+    - Ensures minimum 3 keys available
+    - Warns about insecure permissions
+  - [x] 10.7 Update validation summary counters
+    **Implementation**: All functions use check_start and proper counters
+    - Each new function calls check_start()
+    - Proper increment of CHECKS_PASSED
+    - Proper increment of CHECKS_WARNING
+    - Proper increment of CHECKS_FAILED
+    - Summary displays accurate totals
+  - [x] 10.8 Integration with main function
+    **Implementation**: New checks integrated in main()
+    - check_vault_mode() called after connectivity check
+    - check_config_consistency() called after mode check
+    - Proper execution order maintained
+    - All checks contribute to validation summary
+  - [x] 10.9 Test validation with comprehensive test suite
+    **Implementation**: Created test-validate-vault-extended.sh (458 lines)
+    - 22 test scenarios all passing
+    - Validates all new functions exist
+    - Checks vault-mode.conf integration
+    - Verifies seal status detection
+    - Confirms raft storage validation
+    - Validates unseal keys checking
+    - Tests configuration consistency
+    - Verifies JSON parsing
+    - Checks counter increments
+    - Validates security checks
           elif [[ "$seal_status" == "false" ]]; then
               echo "[SUCCESS] Vault is unsealed and operational"
               CHECKS_PASSED=$((CHECKS_PASSED + 1))
