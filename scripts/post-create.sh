@@ -310,6 +310,46 @@ fetch_vault_secrets() {
     fi
 }
 
+# Function to ensure Vault CLI is installed
+install_vault_cli() {
+    log_info "Checking Vault CLI installation..."
+
+    if command_exists vault; then
+        local vault_version=$(vault version | head -n1 | awk '{print $2}')
+        log_success "Vault CLI already installed: $vault_version"
+        return 0
+    fi
+
+    log_warning "Vault CLI not found. Installing from fallback script..."
+    
+    local install_script="${BASH_SOURCE%/*}/install-vault-cli.sh"
+    if [ ! -f "$install_script" ]; then
+        # Try alternative paths
+        install_script=".devcontainer/scripts/install-vault-cli.sh"
+        if [ ! -f "$install_script" ]; then
+            log_error "Vault CLI installation script not found"
+            log_warning "Vault CLI will not be available. Some features may be limited."
+            return 0  # Non-blocking - don't fail the entire post-create
+        fi
+    fi
+
+    if bash "$install_script"; then
+        log_success "Vault CLI installed successfully via fallback script"
+        
+        # Verify installation
+        if command_exists vault; then
+            local vault_version=$(vault version | head -n1 | awk '{print $2}')
+            log_success "Vault CLI verified: $vault_version"
+        else
+            log_warning "Vault CLI installation completed but command not available"
+            log_info "You may need to restart your terminal or run: source ~/.bashrc"
+        fi
+    else
+        log_warning "Vault CLI installation failed"
+        log_info "This is non-blocking. You can install manually later."
+    fi
+}
+
 # Function to display next steps
 display_next_steps() {
     log_success "Diamonds DevContainer post-create setup completed!"
@@ -337,6 +377,7 @@ main() {
     log_info "Starting Diamonds post-create setup..."
 
     # Run setup steps
+    install_vault_cli
     install_dependencies
     compile_typescript
     compile_solidity
