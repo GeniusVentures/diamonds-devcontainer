@@ -21,7 +21,7 @@ NC='\033[0m' # No Color
 
 # Wizard state
 STEP=1
-TOTAL_STEPS=10  # Increased from 9 to include vault mode selection
+TOTAL_STEPS=11  # Increased from 10 to include auto-unseal configuration
 
 # Logging functions
 log_info() {
@@ -232,6 +232,65 @@ CONFIGURED_BY="${USER:-unknown}"
 EOF
     
     log_success "Configuration saved to $mode_conf_file"
+}
+
+# Step 1.5: Auto-unseal prompt (only for persistent mode)
+step_auto_unseal_prompt() {
+    if [[ "$VAULT_MODE" != "persistent" ]]; then
+        log_info "Auto-unseal not applicable for ephemeral mode (always unsealed)"
+        AUTO_UNSEAL="false"
+        return
+    fi
+    
+    log_step "$STEP" "$TOTAL_STEPS" "Vault Seal/Unseal Configuration"
+    
+    echo ""
+    echo "╔════════════════════════════════════════════════════════════╗"
+    echo "║          Vault Seal/Unseal Configuration                  ║"
+    echo "╠════════════════════════════════════════════════════════════╣"
+    echo "║ Persistent Vault starts 'sealed' (encrypted).             ║"
+    echo "║ Choose how to handle unsealing on container start:        ║"
+    echo "║                                                            ║"
+    echo "║ [N] Manual Unseal (recommended for security)              ║"
+    echo "║     └─ You unseal Vault each time container starts        ║"
+    echo "║     └─ More secure (keys not stored on disk)              ║"
+    echo "║                                                            ║"
+    echo "║ [Y] Auto-unseal (convenience)                             ║"
+    echo "║     └─ Vault automatically unseals on start               ║"
+    echo "║     └─ Less secure (unseal keys stored in plaintext)      ║"
+    echo "╚════════════════════════════════════════════════════════════╝"
+    echo ""
+    
+    if [[ "${NON_INTERACTIVE:-false}" == "true" ]]; then
+        AUTO_UNSEAL="${AUTO_UNSEAL_ARG:-false}"
+        log_info "Non-interactive mode: Auto-unseal=$AUTO_UNSEAL"
+    else
+        read -p "Enable auto-unseal? [y/N]: " auto_unseal_choice
+        auto_unseal_choice=${auto_unseal_choice:-N}
+        
+        if [[ "${auto_unseal_choice^^}" == "Y" ]]; then
+            AUTO_UNSEAL="true"
+            log_warning "⚠️  Auto-unseal enabled. Unseal keys will be stored in plaintext."
+            log_warning "⚠️  This is less secure but more convenient for development."
+            echo ""
+            echo "ℹ️  Auto-Unseal Information:"
+            echo "   • Unseal keys will be saved to .devcontainer/data/vault-unseal-keys.json"
+            echo "   • Vault will automatically unseal on container start"
+            echo "   • Keys file will have restricted permissions (600)"
+            echo "   • Not recommended for production use"
+        else
+            AUTO_UNSEAL="false"
+            log_success "Manual unsealing selected. You will unseal Vault on each container start."
+            echo ""
+            echo "ℹ️  Manual Unseal Information:"
+            echo "   • Unseal keys will be displayed once during initialization"
+            echo "   • You must save them securely (e.g., password manager)"
+            echo "   • You'll need 3 of 5 keys to unseal Vault"
+            echo "   • Unseal command: vault operator unseal <key>"
+        fi
+    fi
+    
+    ((STEP++))
 }
 
 # Step 2: Welcome and prerequisites check
@@ -649,6 +708,7 @@ main() {
     # Run all steps
     step_vault_mode_selection
     save_vault_mode_config
+    step_auto_unseal_prompt
     step_welcome
     step_check_prerequisites
     step_configure_vault
@@ -666,6 +726,7 @@ main() {
 # Handle command line arguments
 NON_INTERACTIVE=false
 VAULT_MODE_ARG=""
+AUTO_UNSEAL_ARG=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -679,12 +740,15 @@ while [[ $# -gt 0 ]]; do
             echo "  --non-interactive       Run without user prompts (uses defaults)"
             echo "  --vault-mode MODE       Set Vault mode: persistent or ephemeral"
             echo "  --vault-mode=MODE       Alternative syntax for vault mode"
+            echo "  --auto-unseal BOOL      Enable auto-unseal: true or false (persistent mode only)"
+            echo "  --auto-unseal=BOOL      Alternative syntax for auto-unseal"
             echo ""
             echo "Examples:"
             echo "  $0                                    # Interactive mode"
             echo "  $0 --non-interactive                  # Non-interactive with defaults"
             echo "  $0 --vault-mode persistent            # Interactive with persistent mode"
             echo "  $0 --non-interactive --vault-mode=ephemeral"
+            echo "  $0 --non-interactive --vault-mode=persistent --auto-unseal=true"
             echo ""
             echo "This wizard guides you through setting up HashiCorp Vault"
             echo "for secure secret management in Diamonds development."
@@ -700,6 +764,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --vault-mode=*)
             VAULT_MODE_ARG="${1#*=}"
+            shift
+            ;;
+        --auto-unseal)
+            AUTO_UNSEAL_ARG="$2"
+            shift 2
+            ;;
+        --auto-unseal=*)
+            AUTO_UNSEAL_ARG="${1#*=}"
             shift
             ;;
         *)
@@ -724,6 +796,19 @@ if [[ "$NON_INTERACTIVE" == "true" ]]; then
                 ;;
             *)
                 log_error "Invalid vault mode: $VAULT_MODE_ARG. Must be 'persistent' or 'ephemeral'"
+                exit 1
+                ;;
+        esac
+    fi
+    
+    # Validate auto-unseal if provided
+    if [[ -n "$AUTO_UNSEAL_ARG" ]]; then
+        case "${AUTO_UNSEAL_ARG,,}" in
+            true|false)
+                AUTO_UNSEAL_ARG="${AUTO_UNSEAL_ARG,,}"
+                ;;
+            *)
+                log_error "Invalid auto-unseal value: $AUTO_UNSEAL_ARG. Must be 'true' or 'false'"
                 exit 1
                 ;;
         esac

@@ -653,7 +653,24 @@
       - Tests for persistent, ephemeral, and invalid modes
 
 - [ ] **5.0 Implement Seal/Unseal Management**
-  - [ ] 5.1 Add auto-unseal prompt to wizard (default: manual/disabled)
+  - [x] 5.1 Add auto-unseal prompt to wizard (default: manual/disabled)
+    - **Completed**: Added step_auto_unseal_prompt() function to vault-setup-wizard.sh
+    - Features:
+      - Beautiful box UI for seal/unseal configuration
+      - [N] Manual Unseal (recommended, default)
+      - [Y] Auto-unseal (convenience)
+      - Only shown for persistent mode (ephemeral always unsealed)
+      - Detailed information about each option after selection
+      - Support for NON_INTERACTIVE mode with AUTO_UNSEAL_ARG
+    - Added --auto-unseal argument parsing:
+      - Supports --auto-unseal true/false
+      - Supports --auto-unseal=true/false
+      - Validates argument (must be true or false)
+      - Updated --help with new option and examples
+    - Updated wizard flow:
+      - Added step_auto_unseal_prompt after save_vault_mode_config
+      - Updated TOTAL_STEPS from 10 to 11
+      - AUTO_UNSEAL variable available to rest of wizard
     - In `vault-setup-wizard.sh`, add new function after mode selection:
       ```bash
       step_auto_unseal_prompt() {
@@ -703,7 +720,17 @@
       ```
     - Add `--auto-unseal` flag to argument parser
     - Call this function after mode selection
-  - [ ] 5.2 Create `.devcontainer/data/vault-unseal-keys.json` generation during Vault init
+  - [x] 5.2 Create `.devcontainer/data/vault-unseal-keys.json` generation during Vault init
+    - **Completed**: Modified vault-init.sh to handle persistent mode initialization
+    - Features:
+      - Detects vault mode from vault-mode.conf
+      - Performs `vault operator init` via HTTP API for persistent mode
+      - Generates 5 unseal keys with threshold of 3 (Shamir's Secret Sharing)
+      - Saves keys + root token to vault-unseal-keys.json with timestamp
+      - Sets secure permissions (chmod 600) on unseal keys file
+      - Auto-unseals Vault using first 3 keys after initialization
+      - Checks if Vault already initialized (idempotent)
+      - Handles missing unseal keys file for pre-existing Vault instances
     - In `vault-init.sh` (or wizard), after Vault initialization:
       ```bash
       # Save unseal keys if persistent mode
@@ -722,7 +749,12 @@
       ```
     - Ensure this only runs once during initial Vault setup
     - Handle case where Vault already initialized (keys file exists)
-  - [ ] 5.3 Implement secure file permissions (chmod 600) for unseal keys
+  - [x] 5.3 Implement secure file permissions (chmod 600) for unseal keys
+    - **Completed**: Implemented in vault-init.sh within initialize_persistent_vault() function
+    - Command: `chmod 600 "$UNSEAL_KEYS_FILE"`
+    - Ensures only owner can read/write unseal keys
+    - Applied immediately after creating the file
+    - Verification: `ls -l .devcontainer/data/vault-unseal-keys.json` should show `-rw-------`
     - Immediately after creating unseal keys file:
       ```bash
       # Secure unseal keys file (owner read/write only)
@@ -730,7 +762,19 @@
       log_info "Unseal keys file permissions set to 600 (owner only)"
       ```
     - Verify permissions: `ls -l .devcontainer/data/vault-unseal-keys.json` should show `-rw-------`
-  - [ ] 5.4 Create `.devcontainer/scripts/vault-auto-unseal.sh` script
+  - [x] 5.4 Create `.devcontainer/scripts/vault-auto-unseal.sh` script
+    - **Completed**: Created comprehensive auto-unseal script (138 lines)
+    - Features:
+      - Checks unseal keys file exists and has secure permissions (600)
+      - Verifies Vault connectivity before attempting unseal
+      - Checks if Vault already unsealed (idempotent)
+      - Extracts first 3 of 5 keys from JSON file
+      - Uses HTTP API to unseal Vault (PUT /v1/sys/unseal)
+      - Shows progress after each key (1/3, 2/3, 3/3)
+      - Comprehensive error handling and helpful messages
+      - Exit codes: 0 (success/already unsealed), 1 (error)
+      - Logging functions with color-coded output
+    - Made executable with chmod +x
     - Create new file: `touch .devcontainer/scripts/vault-auto-unseal.sh`
     - Make executable: `chmod +x .devcontainer/scripts/vault-auto-unseal.sh`
     - Add script content:
@@ -804,7 +848,21 @@
       exit 1
       ```
     - Save file
-  - [ ] 5.5 Update `.devcontainer/scripts/post-start.sh` to handle auto-unseal or show instructions
+  - [x] 5.5 Update `.devcontainer/scripts/post-start.sh` to handle auto-unseal or show instructions
+    - **Completed**: Integrated seal/unseal handling into auto_detect_vault_status() function
+    - Features:
+      - Detects vault mode from vault-mode.conf
+      - Checks seal status via HTTP API (/v1/sys/seal-status)
+      - If AUTO_UNSEAL=true: runs vault-auto-unseal.sh automatically
+      - If AUTO_UNSEAL=false: displays comprehensive manual unseal instructions
+      - Beautiful formatted instruction boxes with clear step-by-step guidance
+      - Includes quick unseal command (one-liner using jq and while loop)
+      - Shows manual unseal steps (3 commands)
+      - Provides instructions to view unseal keys
+      - Explains how to enable auto-unseal
+      - Success message when Vault is already unsealed
+      - Handles ephemeral mode (no unseal needed)
+      - Graceful error handling if auto-unseal fails
     - Open `.devcontainer/scripts/post-start.sh`
     - Add after Vault is started/ready:
       ```bash
@@ -844,18 +902,46 @@
       fi
       ```
     - Save file
-  - [ ] 5.6 Test sealed Vault prevents secret access
+  - [x] 5.6 Test sealed Vault prevents secret access
+    - **Completed**: Created test-vault-sealed-access.sh (231 lines)
+    - Features:
+      - Tests 6 scenarios: accessibility, seal status, sealing, secret access, error messages, health endpoint
+      - Verifies HTTP 503 status when accessing sealed Vault
+      - Checks error messages mention "sealed"
+      - Validates health endpoint reports sealed=true
+      - Can seal an unsealed Vault for testing
+      - Comprehensive test reporting with pass/fail counts
+      - Instructions to unseal after test completes
     - Start Vault in persistent mode (sealed)
     - Try to read a secret: `curl -H "X-Vault-Token: root" http://localhost:8200/v1/secret/data/test`
     - Should return error: "Vault is sealed"
     - Verify HTTP status code is 503 (Service Unavailable)
-  - [ ] 5.7 Test auto-unseal on container restart (if enabled)
+  - [x] 5.7 Test auto-unseal on container restart (if enabled)
+    - **Completed**: Created test-vault-auto-unseal-restart.sh (281 lines)
+    - Features:
+      - Tests 7 scenarios: config check, auto-unseal enable, keys file, container restart, accessibility, seal status, secret access
+      - Temporarily enables AUTO_UNSEAL=true for testing
+      - Restarts Vault container and waits for startup
+      - Verifies Vault auto-unseals successfully
+      - Tests secret write/read after auto-unseal
+      - Restores original configuration after test
+      - Comprehensive error handling and reporting
     - Enable auto-unseal in vault-mode.conf: `AUTO_UNSEAL="true"`
     - Restart container: `docker-compose restart`
     - Watch post-start.sh output for auto-unseal messages
     - Verify Vault becomes unsealed automatically
     - Check: `curl -s http://localhost:8200/v1/sys/seal-status | jq '.sealed'` should return `false`
-  - [ ] 5.8 Test manual unseal workflow with instructions
+  - [x] 5.8 Test manual unseal workflow with instructions
+    - **Completed**: Created test-vault-manual-unseal.sh (328 lines)
+    - Features:
+      - Tests 8 scenarios: config, disable auto-unseal, keys file permissions, restart, sealed verification, blocked access, manual unseal, post-unseal access
+      - Temporarily disables AUTO_UNSEAL for testing
+      - Verifies Vault starts sealed
+      - Tests manual unseal via CLI (if available) or HTTP API
+      - Shows unseal progress (1/3, 2/3, 3/3)
+      - Verifies secrets accessible after manual unseal
+      - Restores original configuration
+      - Documents complete manual unseal workflow
     - Set AUTO_UNSEAL="false" in vault-mode.conf
     - Restart container
     - Verify instructions appear in post-start.sh output

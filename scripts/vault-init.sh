@@ -5,9 +5,13 @@
 set -e
 
 # Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 VAULT_ADDR="${VAULT_ADDR:-http://vault-dev:8200}"
 VAULT_TOKEN="${VAULT_TOKEN:-root}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+UNSEAL_KEYS_FILE="${PROJECT_ROOT}/.devcontainer/data/vault-unseal-keys.json"
+VAULT_MODE_CONF="${PROJECT_ROOT}/.devcontainer/data/vault-mode.conf"
 
 # Colors for output
 RED='\033[0;31m'
@@ -52,6 +56,87 @@ wait_for_vault() {
 
     log_error "Vault failed to start after $max_attempts attempts"
     return 1
+}
+
+# Initialize Vault in persistent mode (operator init)
+initialize_persistent_vault() {
+    log_info "Initializing Vault in persistent mode..."
+    
+    # Check if Vault is already initialized
+    local init_status=$(curl -s "$VAULT_ADDR/v1/sys/health" | jq -r '.initialized' 2>/dev/null || echo "false")
+    
+    if [[ "$init_status" == "true" ]]; then
+        log_success "Vault is already initialized"
+        
+        # Check if unseal keys file exists
+        if [[ ! -f "$UNSEAL_KEYS_FILE" ]]; then
+            log_warning "⚠️  Vault is initialized but unseal keys file not found"
+            log_warning "⚠️  If Vault was initialized outside this script, you may need to manually create:"
+            log_warning "⚠️  $UNSEAL_KEYS_FILE"
+        fi
+        
+        return 0
+    fi
+    
+    log_info "Performing initial Vault operator init..."
+    
+    # Initialize Vault using HTTP API (returns unseal keys and root token)
+    local init_response=$(curl -s -X PUT "$VAULT_ADDR/v1/sys/init" \
+        -d '{
+            "secret_shares": 5,
+            "secret_threshold": 3
+        }' 2>/dev/null)
+    
+    # Check if initialization was successful
+    if [[ -z "$init_response" ]] || ! echo "$init_response" | jq -e '.keys' >/dev/null 2>&1; then
+        log_error "Failed to initialize Vault"
+        log_error "Response: $init_response"
+        return 1
+    fi
+    
+    # Save unseal keys to file
+    log_info "Saving unseal keys to $UNSEAL_KEYS_FILE..."
+    echo "$init_response" | jq '{
+        keys: .keys,
+        keys_base64: .keys_base64,
+        root_token: .root_token,
+        created_at: now | strftime("%Y-%m-%d %H:%M:%S UTC")
+    }' > "$UNSEAL_KEYS_FILE"
+    
+    # Secure the file (owner read/write only)
+    chmod 600 "$UNSEAL_KEYS_FILE"
+    log_success "✅ Unseal keys saved and secured (chmod 600)"
+    
+    # Extract root token for subsequent operations
+    VAULT_TOKEN=$(echo "$init_response" | jq -r '.root_token')
+    export VAULT_TOKEN
+    
+    log_success "✅ Vault initialized successfully!"
+    log_info "Root token: $VAULT_TOKEN"
+    
+    # Unseal Vault using first 3 keys
+    log_info "Unsealing Vault..."
+    local unseal_keys
+    mapfile -t unseal_keys < <(echo "$init_response" | jq -r '.keys_base64[]' | head -n 3)
+    
+    for i in "${!unseal_keys[@]}"; do
+        local key="${unseal_keys[$i]}"
+        log_info "Unsealing with key $((i+1))/3..."
+        
+        local unseal_response=$(curl -s -X PUT -d "{\"key\":\"$key\"}" "$VAULT_ADDR/v1/sys/unseal")
+        local sealed=$(echo "$unseal_response" | jq -r '.sealed')
+        local progress=$(echo "$unseal_response" | jq -r '.progress')
+        local threshold=$(echo "$unseal_response" | jq -r '.t')
+        
+        log_info "Unseal progress: $progress/$threshold"
+        
+        if [[ "$sealed" == "false" ]]; then
+            log_success "✅ Vault unsealed successfully!"
+            break
+        fi
+    done
+    
+    return 0
 }
 
 # Initialize Vault with GitHub authentication
@@ -193,8 +278,28 @@ main() {
 
     # Wait for Vault to be ready
     wait_for_vault
+    
+    # Check if running in persistent mode (requires operator init)
+    local vault_mode="ephemeral"  # Default to ephemeral
+    
+    if [[ -f "$VAULT_MODE_CONF" ]]; then
+        source "$VAULT_MODE_CONF"
+        vault_mode="${VAULT_MODE:-ephemeral}"
+    fi
+    
+    log_info "Detected Vault mode: $vault_mode"
+    
+    # If persistent mode, perform operator init and unseal
+    if [[ "$vault_mode" == "persistent" ]]; then
+        initialize_persistent_vault || {
+            log_error "Failed to initialize persistent Vault"
+            return 1
+        }
+    else
+        log_info "Ephemeral mode detected - skipping operator init (dev mode auto-initializes)"
+    fi
 
-    # Setup components
+    # Setup components (policies, auth, etc.)
     setup_github_auth
     create_policies
     setup_github_team_mappings
@@ -208,7 +313,6 @@ main() {
     log_info "1. Run vault-fetch-secrets.sh to retrieve secrets"
     log_info "2. Use VaultSecretManager.ts for programmatic access"
     log_info "3. Run migrate-secrets-to-vault.sh to import existing secrets"
-}
 
 # Run main function
 main "$@"

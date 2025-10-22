@@ -287,6 +287,101 @@ auto_detect_vault_status() {
         recommendations+=("Start Vault server: docker-compose up vault-dev")
     fi
 
+    # Handle Vault sealing/unsealing for persistent mode
+    if [[ -n "${VAULT_ADDR:-}" ]] && curl -s --max-time 3 "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
+        local vault_mode_conf="/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-mode.conf"
+        
+        if [[ -f "$vault_mode_conf" ]]; then
+            # Source the configuration
+            source "$vault_mode_conf"
+            
+            if [[ "${VAULT_MODE:-ephemeral}" == "persistent" ]]; then
+                log_info "Detected Vault persistent mode"
+                
+                # Check seal status
+                local seal_status=$(curl -s "$VAULT_ADDR/v1/sys/seal-status" | jq -r '.sealed' 2>/dev/null || echo "error")
+                
+                if [[ "$seal_status" == "true" ]]; then
+                    log_warning "🔒 Vault is SEALED (persistent mode)"
+                    
+                    if [[ "${AUTO_UNSEAL:-false}" == "true" ]]; then
+                        log_info "Auto-unseal is enabled. Attempting to unseal Vault..."
+                        
+                        local unseal_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/vault-auto-unseal.sh"
+                        if [[ -f "$unseal_script" ]]; then
+                            if bash "$unseal_script"; then
+                                log_success "✅ Vault auto-unsealed successfully!"
+                            else
+                                log_error "Auto-unseal failed. Manual unsealing required."
+                                vault_configured=false
+                                recommendations+=("Unseal Vault manually - see instructions below")
+                                
+                                echo ""
+                                echo "═══════════════════════════════════════════════════════"
+                                log_info "🔒 Manual Unseal Instructions:"
+                                echo "═══════════════════════════════════════════════════════"
+                                echo "  1. Export VAULT_ADDR:"
+                                echo "     export VAULT_ADDR=$VAULT_ADDR"
+                                echo ""
+                                echo "  2. Quick unseal (uses first 3 keys):"
+                                echo "     cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]' | head -n 3 | while read key; do vault operator unseal \$key; done"
+                                echo ""
+                                echo "  3. Or unseal manually (repeat 3 times with different keys):"
+                                echo "     vault operator unseal <key1>"
+                                echo "     vault operator unseal <key2>"
+                                echo "     vault operator unseal <key3>"
+                                echo ""
+                                echo "  4. View keys:"
+                                echo "     cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]'"
+                                echo "═══════════════════════════════════════════════════════"
+                                echo ""
+                            fi
+                        else
+                            log_error "Auto-unseal script not found: $unseal_script"
+                            vault_configured=false
+                        fi
+                    else
+                        log_info "Auto-unseal is disabled (manual unsealing required)"
+                        vault_configured=false
+                        
+                        echo ""
+                        echo "═══════════════════════════════════════════════════════"
+                        log_info "🔒 Vault Manual Unseal Required:"
+                        echo "═══════════════════════════════════════════════════════"
+                        echo "  Persistent Vault starts sealed for security."
+                        echo "  You must unseal it before use."
+                        echo ""
+                        echo "  Quick unseal command:"
+                        echo "    export VAULT_ADDR=$VAULT_ADDR"
+                        echo "    cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]' | head -n 3 | while read key; do vault operator unseal \$key; done"
+                        echo ""
+                        echo "  Or unseal manually (3 times):"
+                        echo "    vault operator unseal <key1>"
+                        echo "    vault operator unseal <key2>"
+                        echo "    vault operator unseal <key3>"
+                        echo ""
+                        echo "  View unseal keys:"
+                        echo "    cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]'"
+                        echo ""
+                        echo "  To enable auto-unseal:"
+                        echo "    Edit .devcontainer/data/vault-mode.conf"
+                        echo "    Set: AUTO_UNSEAL=\"true\""
+                        echo "═══════════════════════════════════════════════════════"
+                        echo ""
+                    fi
+                elif [[ "$seal_status" == "false" ]]; then
+                    log_success "✅ Vault is unsealed and ready (persistent mode)"
+                elif [[ "$seal_status" == "error" ]]; then
+                    log_warning "Could not determine Vault seal status"
+                fi
+            else
+                log_info "Vault running in ephemeral mode (auto-initialized and unsealed)"
+            fi
+        else
+            log_info "Vault mode configuration not found (assuming ephemeral mode)"
+        fi
+    fi
+
     # Check GitHub token
     if [[ -z "${GITHUB_TOKEN:-}" ]] && [[ ! -f ~/.config/gh/hosts.yml ]] && ! gh auth status >/dev/null 2>&1; then
         vault_configured=false
