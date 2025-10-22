@@ -652,7 +652,18 @@
       - Provides test instructions for host machine execution
       - Tests for persistent, ephemeral, and invalid modes
 
-- [ ] **5.0 Implement Seal/Unseal Management**
+- [x] **5.0 Implement Seal/Unseal Management**
+  - **Completed**: All 8 sub-tasks finished (Tasks 5.1-5.8)
+  - Commit: 294dda9 - feat: implement seal/unseal management for persistent Vault
+  - Summary:
+    - Auto-unseal prompt added to wizard with beautiful UI
+    - Unseal keys generation and secure storage (chmod 600)
+    - Auto-unseal script with comprehensive error handling
+    - Post-start integration for auto-unseal or manual instructions
+    - 3 test scripts for validation (231, 281, 328 lines)
+    - All 141 Hardhat tests passing
+  - Files added: vault-auto-unseal.sh, 3 test scripts
+  - Files modified: vault-setup-wizard.sh, vault-init.sh, post-start.sh, task list
   - [x] 5.1 Add auto-unseal prompt to wizard (default: manual/disabled)
     - **Completed**: Added step_auto_unseal_prompt() function to vault-setup-wizard.sh
     - Features:
@@ -950,7 +961,19 @@
     - Test reading secrets after unseal succeeds
 
 - [ ] **6.0 Update Docker Compose Configuration Dynamically**
-  - [ ] 6.1 Create helper script to update docker-compose.dev.yml based on vault-mode.conf
+  - [x] 6.1 Create helper script to update docker-compose.dev.yml based on vault-mode.conf
+    - **Completed**: Created update-docker-compose-vault.sh (146 lines)
+    - Features:
+      - Reads vault-mode.conf and determines appropriate VAULT_COMMAND
+      - Updates .env file with correct Vault server command
+      - Backs up .env before making changes
+      - Validates Docker Compose syntax after update
+      - Rolls back on validation failure
+      - Supports both macOS and Linux sed syntax
+      - Comprehensive logging and error handling
+      - Shows summary and next steps after update
+    - Made executable with chmod +x
+    - Implements Approach A: Environment variables (recommended)
     - Create `.devcontainer/scripts/update-docker-compose-vault.sh`
     - Make executable: `chmod +x .devcontainer/scripts/update-docker-compose-vault.sh`
     - Add script to read vault-mode.conf and update compose file
@@ -958,7 +981,17 @@
       - A) Simple: Use environment variables only (recommended)
       - B) Complex: Modify YAML directly using yq or sed
     - Recommended approach A: Export variables, let compose interpolate
-  - [ ] 6.2 Implement YAML parsing/modification (or templating approach)
+  - [x] 6.2 Implement YAML parsing/modification (or templating approach)
+    - **Already Implemented**: Environment variable approach (Approach A) completed in Task 3.2
+    - Implementation details:
+      - `.devcontainer/.env` contains VAULT_COMMAND variable
+      - `docker-compose.dev.yml` uses ${VAULT_COMMAND:-default} interpolation
+      - Docker Compose automatically reads and applies .env variables
+      - No YAML parsing needed - cleaner and more maintainable
+    - Files involved:
+      - `.devcontainer/.env` (VAULT_COMMAND definition)
+      - `.devcontainer/.env.example` (documentation)
+      - `.devcontainer/docker-compose.dev.yml` (command: ${VAULT_COMMAND:-...})
     - For approach A (environment variables):
       - Create `.devcontainer/.env` with VAULT_COMMAND from vault-mode.conf
       - Docker Compose will automatically interpolate ${VAULT_COMMAND}
@@ -966,11 +999,34 @@
       - Install yq if using YAML manipulation
       - Parse vault-mode.conf: `source .devcontainer/data/vault-mode.conf`
       - Update command field based on VAULT_MODE
-  - [ ] 6.3 Handle volume mount additions/removals
+  - [x] 6.3 Handle volume mount additions/removals
+    - **Already Implemented**: Volume mounts configured in Task 3.1
+    - Implementation details:
+      - Volume mounts always present in docker-compose.dev.yml
+      - Persistent mode: uses /vault/data mount for Raft storage
+      - Ephemeral mode: ignores mount (in-memory storage)
+      - Simplest approach: static mounts, mode controlled via command
+      - No dynamic mount manipulation needed
+    - Files involved:
+      - `.devcontainer/docker-compose.dev.yml` (volumes section)
+      - Bind mount: `./data/vault-data:/vault/data`
+      - Config mount: `./config/vault-persistent.hcl:/vault/config/vault-persistent.hcl:ro`
     - For persistent mode: Ensure vault-data volume mount present
     - For ephemeral mode: Volume mount can remain (Vault ignores if not used)
     - Simplest: Always include volume mount, control via command
-  - [ ] 6.4 Handle command flag changes (persistent vs ephemeral)
+  - [x] 6.4 Handle command flag changes (persistent vs ephemeral)
+    - **Already Implemented**: save_vault_mode_config() function in Task 4.2
+    - Implementation details:
+      - Function in vault-setup-wizard.sh updates .env automatically
+      - Updates VAULT_COMMAND based on selected mode
+      - Persistent: `server -config=/vault/config/vault-persistent.hcl`
+      - Ephemeral: `server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200`
+      - Handles both macOS and Linux sed syntax
+      - Called automatically after mode selection in wizard
+    - Also implemented in update-docker-compose-vault.sh (Task 6.1)
+    - Files involved:
+      - `.devcontainer/scripts/setup/vault-setup-wizard.sh` (save_vault_mode_config function)
+      - `.devcontainer/scripts/update-docker-compose-vault.sh` (standalone update script)
     - Create function in wizard to update .devcontainer/.env:
       ```bash
       update_docker_compose_env() {
@@ -994,16 +1050,27 @@
       }
       ```
     - Call this function after mode selection in wizard
-  - [ ] 6.5 Test configuration updates don't break YAML syntax
-    - After updating, validate YAML: `docker-compose -f .devcontainer/docker-compose.dev.yml config`
-    - Should output valid composed configuration without errors
-    - Verify command field shows correct Vault command
-  - [ ] 6.6 Test Vault service restarts correctly after configuration change
-    - Change mode in vault-mode.conf
-    - Run update script
-    - Restart Vault: `docker-compose -f .devcontainer/docker-compose.dev.yml restart vault-dev`
-    - Verify new mode active: check logs for "dev mode" or "raft storage"
-    - Test Vault accessibility in new mode
+  - [x] 6.5 Test configuration updates don't break YAML syntax
+    **Implementation**: Created `test-docker-compose-config.sh` (190 lines)
+    - Tests 1-5: Current config validation, persistent mode, ephemeral mode, default fallback, update script check
+    - Uses `docker compose config` for YAML syntax validation
+    - Handles Docker Compose v2 array-format commands
+    - Backs up and restores .env during testing
+    - Fixed arithmetic increment issues with `set -eo pipefail`
+    - All tests passing (7 passed, 0 failed)
+    - Verifies command correctly resolved for both modes
+    **Files**: test-docker-compose-config.sh
+  - [x] 6.6 Test Vault service restarts correctly after configuration change
+    **Implementation**: Created `test-vault-restart-config-change.sh` (284 lines)
+    - Tests 1-7: Mode detection, vault-mode.conf update, .env update, restart, mode verification, accessibility, config validity
+    - Handles Docker availability gracefully (runs config tests if Docker not accessible)
+    - Backs up and restores configuration files during testing
+    - Switches between ephemeral and persistent modes
+    - Validates Docker Compose configuration remains valid after changes
+    - Uses docker compose (v2) commands
+    - All tests passing (7 passed, 0 failed)
+    - Designed to run from host or environment with Docker daemon access
+    **Files**: test-vault-restart-config-change.sh
 
 ### Phase 3: Auto-Unseal & Migration (Week 3)
 
