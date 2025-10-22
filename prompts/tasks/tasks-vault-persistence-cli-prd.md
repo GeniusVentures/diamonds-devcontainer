@@ -248,8 +248,8 @@
     - Documented graceful degradation strategy
 
 
-- [x] **3.0 Configure Docker Compose for Conditional Vault Modes**
-  - [ ] 3.1 Update `.devcontainer/docker-compose.dev.yml` to support conditional volume mounts
+- [x] **2.0 Install Vault CLI in DevContainer**
+  - [x] 2.1 Add Vault CLI installation to `.devcontainer/Dockerfile` (HashiCorp APT repo)
     - Open `.devcontainer/docker-compose.dev.yml`
     - Locate the `vault-dev` service section
     - Update volumes to be conditional (initially mount both for testing):
