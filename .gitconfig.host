@@ -1,0 +1,18 @@
+[user]
+	name = Am0rfu5
+	email = 1178902+Am0rfu5@users.noreply.github.com
+	eamil = 1178902+Am0rfu5@users.noreply.github.com
+[sequence]
+	editor = vim
+[core]
+	fileMode = false
+	pager = less
+[init]
+	defaultBranch = main
+[credential "https://github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+# test

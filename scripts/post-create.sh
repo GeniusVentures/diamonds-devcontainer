@@ -141,6 +141,33 @@ generate_typechain() {
     fi
 }
 
+# Function to setup git configuration
+setup_git_config() {
+    log_info "Setting up git configuration..."
+
+    # Copy host .gitconfig if it was saved by initializeCommand
+    if [ -f .devcontainer/.gitconfig.host ] && [ ! -f /home/node/.gitconfig ]; then
+        log_info "Copying git configuration from host..."
+        cp .devcontainer/.gitconfig.host /home/node/.gitconfig
+        chmod 644 /home/node/.gitconfig
+        log_success "Git configuration copied from host"
+    elif [ -f /home/node/.gitconfig ]; then
+        log_info "Git configuration already exists in container"
+    else
+        log_info "No host git configuration found, creating basic config..."
+        # Create a basic .gitconfig if none exists
+        cat > /home/node/.gitconfig << 'EOF'
+[core]
+    filemode = false
+[init]
+    defaultBranch = main
+[credential]
+    helper = store
+EOF
+        log_success "Basic git configuration created"
+    fi
+}
+
 # Function to setup Husky git hooks
 setup_husky_hooks() {
     log_info "Setting up Husky git hooks..."
@@ -379,6 +406,7 @@ main() {
     # Run setup steps
     install_vault_cli
     install_dependencies
+    setup_git_config
     compile_typescript
     compile_solidity
     generate_typechain
