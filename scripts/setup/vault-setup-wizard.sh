@@ -214,7 +214,10 @@ save_vault_mode_config() {
     fi
     
     # Also save to vault-mode.conf for reference
-    local mode_conf_file="${PROJECT_ROOT}/.devcontainer/data/vault-mode.conf"
+    local mode_conf_file="${PROJECT_ROOT}/.devcontainer/data/vault-data/vault-mode.conf"
+    
+    # Ensure the vault-data directory exists
+    mkdir -p "${PROJECT_ROOT}/.devcontainer/data/vault-data"
     
     cat > "$mode_conf_file" <<EOF
 # Vault Mode Configuration
@@ -533,7 +536,7 @@ initialize_persistent_vault() {
     echo ""
 
     # Update the vault-mode.conf to indicate we want to initialize
-    local mode_conf="/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-mode.conf"
+    local mode_conf="/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-data/vault-mode.conf"
     if [[ -f "$mode_conf" ]]; then
         # Mark that we want to initialize persistent mode
         sed -i 's/AUTO_UNSEAL=.*/AUTO_UNSEAL="true"/' "$mode_conf"
@@ -571,7 +574,11 @@ step_initialize_vault() {
                 echo "  • Set up proper persistent storage"
                 echo ""
 
-                if prompt_yes_no "Initialize persistent Vault storage?"; then
+                if [[ "${NON_INTERACTIVE:-false}" == "true" ]]; then
+                    log_info "Non-interactive mode: Automatically initializing persistent storage..."
+                    initialize_persistent_vault
+                    return
+                elif prompt_yes_no "Initialize persistent Vault storage?"; then
                     initialize_persistent_vault
                     return
                 else

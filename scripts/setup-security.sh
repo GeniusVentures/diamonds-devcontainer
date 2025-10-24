@@ -266,7 +266,32 @@ setup_osv_scanner() {
             return 1
         fi
         
-        go install github.com/google/osv-scanner/cmd/osv-scanner@latest
+        # Try Go install with proxy configuration
+        log_info "Attempting Go install with proxy configuration..."
+        export GOPROXY="https://proxy.golang.org,direct"
+        export GOSUMDB="sum.golang.org"
+        
+        if go install github.com/google/osv-scanner/cmd/osv-scanner@latest 2>/dev/null; then
+            log_success "OSV-Scanner installed via Go"
+        else
+            log_warning "Go install failed, trying direct binary download..."
+            
+            # Fallback: Try to download pre-built binary
+            local osv_version="1.9.2"
+            local osv_url="https://github.com/google/osv-scanner/releases/download/v${osv_version}/osv-scanner_${osv_version}_linux_amd64.tar.gz"
+            
+            if command_exists curl && curl -s --head "$osv_url" >/dev/null 2>&1; then
+                log_info "Downloading OSV-Scanner binary v${osv_version}..."
+                mkdir -p "$HOME/go/bin"
+                curl -L "$osv_url" | tar -xz -C "$HOME/go/bin" --strip-components=1 "osv-scanner_${osv_version}_linux_amd64/osv-scanner" 2>/dev/null && \
+                chmod +x "$HOME/go/bin/osv-scanner" && \
+                log_success "OSV-Scanner binary downloaded successfully"
+            else
+                log_warning "Binary download failed. OSV-Scanner will be skipped."
+                log_info "You can install OSV-Scanner manually later with: go install github.com/google/osv-scanner/cmd/osv-scanner@latest"
+                return 0  # Don't fail the entire setup
+            fi
+        fi
         
         # Verify installation with explicit path
         if [ -f "$HOME/go/bin/osv-scanner" ]; then

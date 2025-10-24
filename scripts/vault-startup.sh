@@ -33,8 +33,8 @@ raft_initialized() {
 initialize_persistent() {
     echo "Initializing persistent Vault for the first time..."
 
-    # Create raft directory if it doesn't exist
-    mkdir -p /vault/data/raft
+    # Create raft directory in the DevContainer data/vault-data/ if it doesn't exist
+    mkdir -p ${WORKSPACE_FOLDER}/data/vault-data/raft 
 
     # Start Vault in ephemeral mode first to get it running
     echo "Starting Vault in ephemeral mode for initialization..."
@@ -96,7 +96,7 @@ elif [[ "${VAULT_COMMAND}" == *"-config="* ]] || [[ "${VAULT_COMMAND}" == "serve
     # VAULT_COMMAND is set to persistent mode
     if raft_initialized; then
         echo "Starting Vault in persistent mode (raft initialized)..."
-        exec vault ${PERSISTENT_CMD}
+        exec vault ${VAULT_COMMAND}
     else
         echo "Raft directory not initialized. Starting Vault in ephemeral mode for initial setup..."
         echo "Run the vault-setup-wizard.sh to initialize persistent mode."
@@ -105,5 +105,5 @@ elif [[ "${VAULT_COMMAND}" == *"-config="* ]] || [[ "${VAULT_COMMAND}" == "serve
 else
     # VAULT_COMMAND is ephemeral or default
     echo "Starting Vault in ephemeral mode..."
-    exec vault ${EPHEMERAL_CMD}
+    exec vault ${VAULT_COMMAND:-${EPHEMERAL_CMD}}
 fi
