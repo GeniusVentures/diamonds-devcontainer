@@ -12,28 +12,29 @@ services:
       args:
         NODE_VERSION: 20
         PYTHON_VERSION: 3.11
-        WORKSPACE_NAME: ${WORKSPACE_NAME}
+        WORKSPACE_NAME: ${WORKSPACE_NAME:-diamonds_project}
     volumes:
       # Project source code
-      - ..:/workspaces/${WORKSPACE_NAME}:cached
+      - ..:/workspaces/${WORKSPACE_NAME:-diamonds_project}:cached
 
       # Cache volumes for performance
-      - node-modules:/workspaces/${WORKSPACE_NAME}/node_modules
-      - hardhat-artifacts:/workspaces/${WORKSPACE_NAME}/artifacts
-      - hardhat-cache:/workspaces/${WORKSPACE_NAME}/cache
-      - diamond-abi:/workspaces/${WORKSPACE_NAME}/diamond-abi
-      - diamond-typechain:/workspaces/${WORKSPACE_NAME}/diamond-typechain-types
-      - typechain-types:/workspaces/${WORKSPACE_NAME}/typechain-types
-      - reports:/workspaces/${WORKSPACE_NAME}/reports
+      - yarn-cache:/home/node/.yarn/cache
+      - node-modules:/workspaces/${WORKSPACE_NAME:-diamonds_project}/node_modules
+      - hardhat-artifacts:/workspaces/${WORKSPACE_NAME:-diamonds_project}/artifacts
+      - hardhat-cache:/workspaces/${WORKSPACE_NAME:-diamonds_project}/cache
+      - diamond-abi:/workspaces/${WORKSPACE_NAME:-diamonds_project}/diamond-abi
+      - diamond-typechain:/workspaces/${WORKSPACE_NAME:-diamonds_project}/diamond-typechain-types
+      - typechain-types:/workspaces/${WORKSPACE_NAME:-diamonds_project}/typechain-types
+      - reports:/workspaces/${WORKSPACE_NAME:-diamonds_project}/reports
 
       # SSH and Git configuration
       - ~/.ssh:/home/node/.ssh:ro
-      - ~/.gitconfig:/home/node/.gitconfig:ro
+      - ~/.gitconfig:/home/node/.gitconfig
 
       # Environment file
-      - ./.env:/workspaces/${WORKSPACE_NAME}/.env
+      - ./.env:/workspaces/${WORKSPACE_NAME:-diamonds_project}/.env
 
-    working_dir: /workspaces/${WORKSPACE_NAME}
+    working_dir: /workspaces/${WORKSPACE_NAME:-diamonds_project}
     command: sleep infinity
     ports:
       - "8546:8546" # Additional Blockchain Node
@@ -48,7 +49,7 @@ services:
       - REPORT_GAS=false
       - PYTHONUNBUFFERED=1
       - PIP_DISABLE_PIP_VERSION_CHECK=1
-      - WORKSPACE_NAME=${WORKSPACE_NAME}
+      - WORKSPACE_NAME=${WORKSPACE_NAME:-diamonds_project}
       - VAULT_ADDR=http://vault-dev:8200
       - DIAMOND_NAME=${DIAMOND_NAME:-ExampleDiamond}
     networks:
@@ -78,7 +79,7 @@ services:
   #   VAULT_COMMAND='server -config=/vault/config/vault-persistent.hcl' docker compose up -d
   vault-dev:
     image: hashicorp/vault:latest
-    command: ${VAULT_COMMAND:-server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200}
+    entrypoint: ["sh", "/vault/startup.sh"]
     ports:
       - "8200:8200"
     environment:
@@ -86,8 +87,12 @@ services:
       - VAULT_DEV_ROOT_TOKEN_ID=root
       - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
       - VAULT_LOG_LEVEL=info
+      - VAULT_COMMAND=${VAULT_COMMAND:-server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200}
       # VAULT_ADDR is set in devcontainer to: http://vault-dev:8200
     volumes:
+      # Startup script
+      - ./scripts/vault-startup.sh:/vault/startup.sh:ro
+
       # Config file for persistent mode (conditionally used)
       - ./config/vault-persistent.hcl:/vault/config/vault-persistent.hcl:ro
 
@@ -111,19 +116,15 @@ services:
   hardhat-node:
     image: node:20-bookworm
     volumes:
-      - ..:/workspaces/${WORKSPACE_NAME}:cached
-      - node-modules:/workspaces/${WORKSPACE_NAME}/node_modules
-    working_dir: /workspaces/${WORKSPACE_NAME}
-    command: >
-      bash -c "
-        yarn install --frozen-lockfile --prefer-offline &&
-        npx hardhat node --hostname 0.0.0.0 --port 8545
-      "
+      - ..:/workspaces/${WORKSPACE_NAME:-diamonds_project}:cached
+      - ../node_modules:/workspaces/${WORKSPACE_NAME:-diamonds_project}/node_modules:ro
+    working_dir: /workspaces/${WORKSPACE_NAME:-diamonds_project}
+    command: npx hardhat node --hostname 0.0.0.0 --port 8545
     ports:
       - "8545:8545"
     environment:
       - NODE_ENV=development
-      - WORKSPACE_NAME=${WORKSPACE_NAME}
+      - WORKSPACE_NAME=${WORKSPACE_NAME:-diamonds_project}
     networks:
       - project-network
     healthcheck:
@@ -135,6 +136,7 @@ services:
 
 # Named volumes for persistence and caching
 volumes:
+  yarn-cache:
   node-modules:
   hardhat-artifacts:
   hardhat-cache:

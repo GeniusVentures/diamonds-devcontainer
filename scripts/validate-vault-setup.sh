@@ -364,6 +364,20 @@ check_unseal_keys() {
     log_info "Checking unseal keys file..."
     check_start
     
+    # Check if auto-unseal is enabled
+    local config_file="/workspaces/${WORKSPACE_NAME:-diamonds_dev_env}/.devcontainer/data/vault-mode.conf"
+    local auto_unseal=false
+    if [[ -f "$config_file" ]]; then
+        source "$config_file"
+        auto_unseal="${AUTO_UNSEAL:-false}"
+    fi
+    
+    if [[ "$auto_unseal" != "true" ]]; then
+        log_info "Auto-unseal not enabled - unseal keys file not required for manual unsealing"
+        log_success "Manual unseal mode - no unseal keys file needed"
+        return 0
+    fi
+    
     local keys_file="/workspaces/${WORKSPACE_NAME:-diamonds_dev_env}/.devcontainer/data/vault-unseal-keys.json"
     
     if [[ -f "$keys_file" ]]; then
@@ -396,10 +410,14 @@ check_unseal_keys() {
             log_warning "Cannot validate unseal keys JSON structure (jq not available or invalid JSON)"
         fi
     else
-        log_error "Unseal keys file not found: $keys_file"
-        log_info "This file is created during Vault initialization"
-        log_info "Run: vault operator init (or use vault-init.sh script)"
-        return 1
+        log_warning "Unseal keys file not found: $keys_file"
+        log_warning "Auto-unseal is enabled but unseal keys are missing"
+        log_info "To fix this:"
+        log_info "  1. Disable auto-unseal: edit vault-mode.conf and set AUTO_UNSEAL=false"
+        log_info "  2. Or re-initialize Vault: vault operator init (save keys securely)"
+        log_info "  3. Or restore keys file if you have a backup"
+        log_info "Continuing with manual unseal mode for now"
+        return 0
     fi
     return 0
 }

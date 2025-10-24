@@ -4,9 +4,9 @@
     "docker-compose.dev.yml"
   ],
   "service": "devcontainer",
-  "workspaceFolder": "/workspaces/diamonds_dev_env",
+  "workspaceFolder": "/workspaces/<YOUR_WORKSPACE_NAME>",
   "containerEnv": {
-    "WORKSPACE_NAME": "diamonds_dev_env",
+    "WORKSPACE_NAME": "<YOUR_WORKSPACE_NAME>",
     "DIAMOND_NAME": "ExampleDiamond",
     "NODE_ENV": "development",
     "HARDHAT_NETWORK": "hardhat",

@@ -79,3 +79,4 @@ docker-compose.local.yml
 *.tmp
 
 data
+devcontainer.json

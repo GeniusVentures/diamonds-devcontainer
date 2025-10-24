@@ -21,7 +21,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
   PIP_DISABLE_PIP_VERSION_CHECK=1 \
   NODE_ENV=development \
   YARN_CACHE_FOLDER=/home/node/.yarn/cache \
-  PATH="/home/node/.local/bin:/home/node/.npm-global/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/node/go/bin"
+  PATH="/home/node/.local/bin:/home/node/.npm-global/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/node/go/bin" \
+  WORKSPACE_FOLDER=/workspaces/${WORKSPACE_NAME}
 
 # Install system dependencies in a single layer for better caching
 # First update package lists and apply security updates
@@ -100,13 +101,16 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | g
   && rm -rf /var/lib/apt/lists/*
 
 # Install HashiCorp Vault CLI for secret management
-RUN wget -qO- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \
-  && echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list > /dev/null \
-  && apt-get update \
-  && apt-get install -y vault \
-  && vault --version \
-  && apt-get clean \
-  && rm -rf /var/lib/apt/lists/*
+RUN set -ex \
+  && apt-get remove -y vault 2>/dev/null || true \
+  && rm -f /usr/bin/vault 2>/dev/null || true \
+  && VAULT_VERSION=$(curl -s https://api.github.com/repos/hashicorp/vault/releases/latest | jq -r '.tag_name' | sed 's/^v//') \
+  && wget -qO /tmp/vault.zip https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip \
+  && unzip /tmp/vault.zip -d /usr/local/bin \
+  && chmod +x /usr/local/bin/vault \
+  && chown root:root /usr/local/bin/vault \
+  && /usr/local/bin/vault --version \
+  && rm /tmp/vault.zip
 
 # Install Docker CLI and Docker Compose for Docker-in-Docker support
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \

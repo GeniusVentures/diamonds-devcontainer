@@ -517,6 +517,35 @@ step_start_vault() {
     ((STEP++))
 }
 
+# Function to initialize persistent Vault
+initialize_persistent_vault() {
+    log_info "Initializing persistent Vault storage..."
+
+    # Stop the current ephemeral Vault (if running)
+    log_info "Stopping ephemeral Vault instance..."
+    # Note: In DevContainer, we can't directly control the service, but we can guide the user
+
+    echo ""
+    log_info "To initialize persistent Vault:"
+    echo "  1. The container will restart with persistent configuration"
+    echo "  2. Vault will initialize with Raft storage backend"
+    echo "  3. You'll need to unseal Vault using the generated keys"
+    echo ""
+
+    # Update the vault-mode.conf to indicate we want to initialize
+    local mode_conf="/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-mode.conf"
+    if [[ -f "$mode_conf" ]]; then
+        # Mark that we want to initialize persistent mode
+        sed -i 's/AUTO_UNSEAL=.*/AUTO_UNSEAL="true"/' "$mode_conf"
+        echo 'INITIALIZE_PERSISTENT="true"' >> "$mode_conf"
+    fi
+
+    log_info "Configuration updated. Please restart the DevContainer to initialize persistent Vault."
+    log_info "After restart, run this wizard again to complete the setup."
+
+    exit 0
+}
+
 # Step 6: Initialize Vault
 step_initialize_vault() {
     log_step $STEP "Initializing Vault"
@@ -527,6 +556,29 @@ step_initialize_vault() {
     # Check if Vault is already initialized
     if vault status >/dev/null 2>&1; then
         log_success "Vault is already initialized"
+
+        # Check if we're configured for persistent mode but running in ephemeral
+        if [[ "$VAULT_MODE" == "persistent" ]]; then
+            # Check if raft directory is initialized
+            if [[ ! -f "/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-data/raft/raft.db" ]]; then
+                echo ""
+                log_info "Vault is configured for persistent mode but the Raft database is not initialized."
+                echo ""
+                echo "Would you like to initialize persistent Vault storage now?"
+                echo "This will:"
+                echo "  • Stop the current ephemeral Vault instance"
+                echo "  • Initialize Vault with Raft storage backend"
+                echo "  • Set up proper persistent storage"
+                echo ""
+
+                if prompt_yes_no "Initialize persistent Vault storage?"; then
+                    initialize_persistent_vault
+                    return
+                else
+                    log_info "Continuing with ephemeral mode. You can initialize persistent storage later."
+                fi
+            fi
+        fi
     else
         # Run vault-init.sh
         echo "Current directory: $(pwd)"
@@ -645,7 +697,7 @@ step_migrate_secrets() {
         log_info "You can add secrets to Vault manually using: vault kv put secret/dev/KEY value=VALUE"
     else
         if prompt_yes_no "Ready to migrate secrets from .env to Vault?"; then
-            local migrate_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/setup/migrate-secrets-to-vault.sh"
+            local migrate_script="$PROJECT_ROOT/.devcontainer/scripts/setup/migrate-secrets-to-vault.sh"
             if [[ -f "$migrate_script" ]]; then
                 log_info "Running secret migration..."
                 if "$migrate_script"; then

@@ -313,6 +313,7 @@ main() {
     log_info "1. Run vault-fetch-secrets.sh to retrieve secrets"
     log_info "2. Use VaultSecretManager.ts for programmatic access"
     log_info "3. Run migrate-secrets-to-vault.sh to import existing secrets"
+}
 
 # Run main function
 main "$@"

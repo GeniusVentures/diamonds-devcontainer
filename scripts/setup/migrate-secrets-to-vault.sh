@@ -11,6 +11,14 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 VAULT_ADDR="${VAULT_ADDR:-http://localhost:8200}"
 VAULT_TOKEN="${VAULT_TOKEN:-}"
 
+# Secret pattern configuration
+SECRET_PATTERNS_FILE="${PROJECT_ROOT}/.devcontainer/data/secret-patterns/secret-patterns.json"
+
+# Arrays to hold loaded patterns
+VAR_NAME_PATTERNS=()
+VAR_VALUE_PATTERNS=()
+EXCLUDE_VARIABLES=()
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -33,6 +41,49 @@ log_warning() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Function to load secret patterns from configuration file
+load_secret_patterns() {
+    log_info "Loading secret patterns from: ${SECRET_PATTERNS_FILE}"
+
+    if [[ ! -f "$SECRET_PATTERNS_FILE" ]]; then
+        log_error "Secret patterns file not found: ${SECRET_PATTERNS_FILE}"
+        log_error "Please ensure the secret patterns configuration file exists"
+        exit 1
+    fi
+
+    # Check if jq is available
+    if ! command_exists jq; then
+        log_error "jq is required but not installed. Please install jq to use external secret patterns."
+        exit 1
+    fi
+
+    # Load variable name patterns
+    mapfile -t VAR_NAME_PATTERNS < <(jq -r '.variable_name_patterns[]' "$SECRET_PATTERNS_FILE" 2>/dev/null || echo "")
+    if [[ ${#VAR_NAME_PATTERNS[@]} -eq 0 ]]; then
+        log_warning "No variable name patterns loaded from configuration file"
+    else
+        log_info "Loaded ${#VAR_NAME_PATTERNS[@]} variable name patterns"
+    fi
+
+    # Load variable value patterns
+    mapfile -t VAR_VALUE_PATTERNS < <(jq -r '.variable_value_patterns[]' "$SECRET_PATTERNS_FILE" 2>/dev/null || echo "")
+    if [[ ${#VAR_VALUE_PATTERNS[@]} -eq 0 ]]; then
+        log_warning "No variable value patterns loaded from configuration file"
+    else
+        log_info "Loaded ${#VAR_VALUE_PATTERNS[@]} variable value patterns"
+    fi
+
+    # Load exclude variables
+    mapfile -t EXCLUDE_VARIABLES < <(jq -r '.exclude_variables[]' "$SECRET_PATTERNS_FILE" 2>/dev/null || echo "")
+    if [[ ${#EXCLUDE_VARIABLES[@]} -eq 0 ]]; then
+        log_warning "No exclude variables loaded from configuration file"
+    else
+        log_info "Loaded ${#EXCLUDE_VARIABLES[@]} exclude variables"
+    fi
+
+    log_success "Secret patterns loaded successfully"
 }
 
 # Function to check if a command exists
@@ -67,28 +118,34 @@ is_secret_variable() {
     local var_name="$1"
     local var_value="$2"
 
-    # Skip non-secret variables
-    case "$var_name" in
-        WORKSPACE_NAME|HH_CHAIN_ID|*_MOCK_CHAIN_ID|*_BLOCK|DIAMOND_NAME)
+    # Check exclude variables first
+    for exclude_pattern in "${EXCLUDE_VARIABLES[@]}"; do
+        if [[ "$var_name" =~ $exclude_pattern ]]; then
             return 1 # Not a secret
-            ;;
-        *)
-            # Check if value looks like a secret (contains sensitive patterns)
-            if [[ "$var_value" =~ ^(sk|pk|xoxp|xoxb|ghp)_ ]] || \
-               [[ "$var_value" =~ ^0x[0-9a-fA-F]{64}$ ]] || \
-               [[ "$var_name" =~ (PRIVATE_KEY|SECRET|TOKEN|KEY|PASSWORD)$ ]]; then
-                return 0 # Is a secret
-            else
-                return 1 # Not a secret
-            fi
-            ;;
-    esac
+        fi
+    done
+
+    # Check variable name patterns
+    for name_pattern in "${VAR_NAME_PATTERNS[@]}"; do
+        if [[ "$var_name" =~ $name_pattern ]]; then
+            return 0 # Is a secret
+        fi
+    done
+
+    # Check variable value patterns
+    for value_pattern in "${VAR_VALUE_PATTERNS[@]}"; do
+        if [[ "$var_value" =~ $value_pattern ]]; then
+            return 0 # Is a secret
+        fi
+    done
+
+    return 1 # Not a secret
 }
 
 # Function to backup .env file
 create_backup() {
     local env_file="$1"
-    local backup_file="logs/${env_file}.vault-migrated.$(date +%Y%m%d_%H%M%S)"
+    local backup_file="${env_file}.vault-migrated.$(date +%Y%m%d_%H%M%S)"
 
     log_info "Creating backup of .env file: ${backup_file}"
     cp "$env_file" "$backup_file"
@@ -234,6 +291,9 @@ main() {
 
     log_info "Secret Migration to Vault"
     log_info "=================================="
+
+    # Load secret patterns from configuration file
+    load_secret_patterns
 
     # Check if .env file exists
     if [[ ! -f "$env_file" ]]; then

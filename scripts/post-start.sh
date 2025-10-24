@@ -284,10 +284,10 @@ auto_detect_vault_status() {
     # Check if Vault server is accessible
     if [[ -n "${VAULT_ADDR:-}" ]] && ! curl -s --max-time 3 "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
         vault_configured=false
-        recommendations+=("Start Vault server: docker-compose up vault-dev")
+        recommendations+=("Start Vault server (may take a moment to initialize)")
     fi
 
-    # Handle Vault sealing/unsealing for persistent mode
+    # Handle Vault configuration and mode detection
     if [[ -n "${VAULT_ADDR:-}" ]] && curl -s --max-time 3 "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
         local vault_mode_conf="/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-mode.conf"
         
@@ -296,83 +296,105 @@ auto_detect_vault_status() {
             source "$vault_mode_conf"
             
             if [[ "${VAULT_MODE:-ephemeral}" == "persistent" ]]; then
-                log_info "Detected Vault persistent mode"
+                log_info "Detected Vault persistent mode configuration"
                 
-                # Check seal status
-                local seal_status=$(curl -s "$VAULT_ADDR/v1/sys/seal-status" | jq -r '.sealed' 2>/dev/null || echo "error")
-                
-                if [[ "$seal_status" == "true" ]]; then
-                    log_warning "🔒 Vault is SEALED (persistent mode)"
+                # Check if raft directory is initialized
+                if [[ ! -f "/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-data/raft/raft.db" ]]; then
+                    log_warning "⚠️  Vault is configured for persistent mode but not yet initialized"
+                    vault_configured=false
+                    recommendations+=("Run vault-setup-wizard.sh to initialize persistent Vault")
                     
-                    if [[ "${AUTO_UNSEAL:-false}" == "true" ]]; then
-                        log_info "Auto-unseal is enabled. Attempting to unseal Vault..."
-                        
-                        local unseal_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/vault-auto-unseal.sh"
-                        if [[ -f "$unseal_script" ]]; then
-                            if bash "$unseal_script"; then
-                                log_success "✅ Vault auto-unsealed successfully!"
-                            else
-                                log_error "Auto-unseal failed. Manual unsealing required."
-                                vault_configured=false
-                                recommendations+=("Unseal Vault manually - see instructions below")
-                                
-                                echo ""
-                                echo "═══════════════════════════════════════════════════════"
-                                log_info "🔒 Manual Unseal Instructions:"
-                                echo "═══════════════════════════════════════════════════════"
-                                echo "  1. Export VAULT_ADDR:"
-                                echo "     export VAULT_ADDR=$VAULT_ADDR"
-                                echo ""
-                                echo "  2. Quick unseal (uses first 3 keys):"
-                                echo "     cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]' | head -n 3 | while read key; do vault operator unseal \$key; done"
-                                echo ""
-                                echo "  3. Or unseal manually (repeat 3 times with different keys):"
-                                echo "     vault operator unseal <key1>"
-                                echo "     vault operator unseal <key2>"
-                                echo "     vault operator unseal <key3>"
-                                echo ""
-                                echo "  4. View keys:"
-                                echo "     cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]'"
-                                echo "═══════════════════════════════════════════════════════"
-                                echo ""
-                            fi
-                        else
-                            log_error "Auto-unseal script not found: $unseal_script"
-                            vault_configured=false
-                        fi
-                    else
-                        log_info "Auto-unseal is disabled (manual unsealing required)"
-                        vault_configured=false
-                        
-                        echo ""
-                        echo "═══════════════════════════════════════════════════════"
-                        log_info "🔒 Vault Manual Unseal Required:"
-                        echo "═══════════════════════════════════════════════════════"
-                        echo "  Persistent Vault starts sealed for security."
-                        echo "  You must unseal it before use."
-                        echo ""
-                        echo "  Quick unseal command:"
-                        echo "    export VAULT_ADDR=$VAULT_ADDR"
-                        echo "    cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]' | head -n 3 | while read key; do vault operator unseal \$key; done"
-                        echo ""
-                        echo "  Or unseal manually (3 times):"
-                        echo "    vault operator unseal <key1>"
-                        echo "    vault operator unseal <key2>"
-                        echo "    vault operator unseal <key3>"
-                        echo ""
-                        echo "  View unseal keys:"
-                        echo "    cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]'"
-                        echo ""
-                        echo "  To enable auto-unseal:"
-                        echo "    Edit .devcontainer/data/vault-mode.conf"
-                        echo "    Set: AUTO_UNSEAL=\"true\""
-                        echo "═══════════════════════════════════════════════════════"
-                        echo ""
+                    echo ""
+                    echo "═══════════════════════════════════════════════════════"
+                    log_info "🔄 Initialize Persistent Vault:"
+                    echo "═══════════════════════════════════════════════════════"
+                    echo "  Vault is currently running in ephemeral mode for setup."
+                    echo "  To initialize persistent storage:"
+                    echo ""
+                    echo "  1. Run the setup wizard:"
+                    echo "     bash .devcontainer/scripts/setup/vault-setup-wizard.sh"
+                    echo ""
+                    echo "  2. Choose 'Initialize persistent Vault storage' when prompted"
+                    echo "  3. Restart the DevContainer"
+                    echo "═══════════════════════════════════════════════════════"
+                    echo ""
+                else
+                    # Check seal status for initialized persistent mode
+                    local seal_status=$(curl -s "$VAULT_ADDR/v1/sys/seal-status" | jq -r '.sealed' 2>/dev/null || echo "error")
+                    
+                    if [[ "$seal_status" == "true" ]]; then
+                        log_warning "🔒 Vault is SEALED (persistent mode)"
+                      
+                      if [[ "${AUTO_UNSEAL:-false}" == "true" ]]; then
+                          log_info "Auto-unseal is enabled. Attempting to unseal Vault..."
+                          
+                          local unseal_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/vault-auto-unseal.sh"
+                          if [[ -f "$unseal_script" ]]; then
+                              if bash "$unseal_script"; then
+                                  log_success "✅ Vault auto-unsealed successfully!"
+                              else
+                                  log_error "Auto-unseal failed. Manual unsealing required."
+                                  vault_configured=false
+                                  recommendations+=("Unseal Vault manually - see instructions below")
+                                  
+                                  echo ""
+                                  echo "═══════════════════════════════════════════════════════"
+                                  log_info "🔒 Manual Unseal Instructions:"
+                                  echo "═══════════════════════════════════════════════════════"
+                                  echo "  1. Export VAULT_ADDR:"
+                                  echo "     export VAULT_ADDR=$VAULT_ADDR"
+                                  echo ""
+                                  echo "  2. Quick unseal (uses first 3 keys):"
+                                  echo "     cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]' | head -n 3 | while read key; do vault operator unseal \$key; done"
+                                  echo ""
+                                  echo "  3. Or unseal manually (repeat 3 times with different keys):"
+                                  echo "     vault operator unseal <key1>"
+                                  echo "     vault operator unseal <key2>"
+                                  echo "     vault operator unseal <key3>"
+                                  echo ""
+                                  echo "  4. View keys:"
+                                  echo "     cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]'"
+                                  echo "═══════════════════════════════════════════════════════"
+                                  echo ""
+                              fi
+                          else
+                              log_error "Auto-unseal script not found: $unseal_script"
+                              vault_configured=false
+                          fi
+                      else
+                          log_info "Auto-unseal is disabled (manual unsealing required)"
+                          vault_configured=false
+                          
+                          echo ""
+                          echo "═══════════════════════════════════════════════════════"
+                          log_info "🔒 Vault Manual Unseal Required:"
+                          echo "═══════════════════════════════════════════════════════"
+                          echo "  Persistent Vault starts sealed for security."
+                          echo "  You must unseal it before use."
+                          echo ""
+                          echo "  Quick unseal command:"
+                          echo "    export VAULT_ADDR=$VAULT_ADDR"
+                          echo "    cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]' | head -n 3 | while read key; do vault operator unseal \$key; done"
+                          echo ""
+                          echo "  Or unseal manually (3 times):"
+                          echo "    vault operator unseal <key1>"
+                          echo "    vault operator unseal <key2>"
+                          echo "    vault operator unseal <key3>"
+                          echo ""
+                          echo "  View unseal keys:"
+                          echo "    cat .devcontainer/data/vault-unseal-keys.json | jq -r '.keys_base64[]'"
+                          echo ""
+                          echo "  To enable auto-unseal:"
+                          echo "    Edit .devcontainer/data/vault-mode.conf"
+                          echo "    Set: AUTO_UNSEAL=\"true\""
+                          echo "═══════════════════════════════════════════════════════"
+                          echo ""
+                      fi
+                    elif [[ "$seal_status" == "false" ]]; then
+                        log_success "✅ Vault is unsealed and ready (persistent mode)"
+                    elif [[ "$seal_status" == "error" ]]; then
+                        log_warning "Could not determine Vault seal status"
                     fi
-                elif [[ "$seal_status" == "false" ]]; then
-                    log_success "✅ Vault is unsealed and ready (persistent mode)"
-                elif [[ "$seal_status" == "error" ]]; then
-                    log_warning "Could not determine Vault seal status"
                 fi
             else
                 log_info "Vault running in ephemeral mode (auto-initialized and unsealed)"

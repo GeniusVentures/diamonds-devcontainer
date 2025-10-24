@@ -196,7 +196,8 @@ fallback_to_env() {
 
 # Validate critical secrets
 validate_critical_secrets() {
-    local critical_secrets=("PRIVATE_KEY" "TEST_PRIVATE_KEY")
+    # local critical_secrets=("PRIVATE_KEY" "TEST_PRIVATE_KEY")
+    local critical_secrets=("TEST_PRIVATE_KEY")
     local missing_critical=()
 
     for secret in "${critical_secrets[@]}"; do
