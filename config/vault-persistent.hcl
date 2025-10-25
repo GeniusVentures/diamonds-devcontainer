@@ -12,7 +12,10 @@ listener "tcp" {
   tls_disable = 1
 }
 
-api_addr = "http://vault-dev:8200"
-cluster_addr = "http://vault-dev:8201"
+# Use different addresses based on environment
+# In Docker: vault-dev service name
+# Locally: localhost
+api_addr = "http://0.0.0.0:8200"
+cluster_addr = "http://0.0.0.0:8201"
 ui = true
 disable_mlock = true  # Required for Docker containers

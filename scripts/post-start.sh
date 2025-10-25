@@ -265,45 +265,79 @@ display_welcome_message() {
 # Function to auto-detect Vault configuration status
 auto_detect_vault_status() {
     log_info "Auto-detecting Vault configuration status..."
+    log_info "WORKSPACE_NAME: ${WORKSPACE_NAME:-not_set}"
+    log_info "VAULT_ADDR: ${VAULT_ADDR:-not_set}"
 
     local vault_configured=true
     local recommendations=()
 
     # Check if Vault CLI is available
+    log_info "Checking Vault CLI availability..."
     if ! command -v vault >/dev/null 2>&1; then
         vault_configured=false
         recommendations+=("Install Vault CLI: https://www.vaultproject.io/downloads")
+        log_warning "Vault CLI not found"
+    else
+        log_info "Vault CLI is available"
     fi
 
     # Check VAULT_ADDR
+    log_info "Checking VAULT_ADDR environment variable..."
     if [[ -z "${VAULT_ADDR:-}" ]]; then
         vault_configured=false
         recommendations+=("Set VAULT_ADDR environment variable (usually http://vault-dev:8200)")
+        log_warning "VAULT_ADDR environment variable not set"
+    else
+        log_info "VAULT_ADDR is set to: $VAULT_ADDR"
     fi
 
     # Check if Vault server is accessible
-    if [[ -n "${VAULT_ADDR:-}" ]] && ! curl -s --max-time 3 "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
-        vault_configured=false
-        recommendations+=("Start Vault server (may take a moment to initialize)")
+    log_info "Checking Vault server accessibility..."
+    if [[ -n "${VAULT_ADDR:-}" ]]; then
+        log_info "Attempting to connect to Vault at: $VAULT_ADDR"
+        if ! curl -s --max-time 3 "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
+            vault_configured=false
+            recommendations+=("Start Vault server (may take a moment to initialize)")
+            log_warning "Vault server not accessible at $VAULT_ADDR"
+            log_info "curl command failed - checking if vault service is running..."
+            # Check if vault process is running
+            if pgrep -f "vault server" >/dev/null 2>&1; then
+                log_info "Vault process is running but not responding to HTTP requests"
+            else
+                log_warning "No vault server process found running"
+            fi
+        else
+            log_info "Vault server is accessible at $VAULT_ADDR"
+        fi
     fi
 
     # Handle Vault configuration and mode detection
+    log_info "Checking Vault configuration and mode detection..."
     if [[ -n "${VAULT_ADDR:-}" ]] && curl -s --max-time 3 "$VAULT_ADDR/v1/sys/health" >/dev/null 2>&1; then
         local vault_mode_conf="/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-mode.conf"
-        
+        log_info "Checking vault mode configuration file: $vault_mode_conf"
+
         if [[ -f "$vault_mode_conf" ]]; then
+            log_info "Vault mode configuration file found, sourcing it..."
             # Source the configuration
             source "$vault_mode_conf"
-            
+            log_info "VAULT_MODE from config: ${VAULT_MODE:-ephemeral}"
+            log_info "AUTO_UNSEAL from config: ${AUTO_UNSEAL:-false}"
+
             if [[ "${VAULT_MODE:-ephemeral}" == "persistent" ]]; then
                 log_info "Detected Vault persistent mode configuration"
-                
+
                 # Check if raft directory is initialized
-                if [[ ! -f "/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-data/raft/raft.db" ]]; then
-                    log_warning "⚠️  Vault is configured for persistent mode but not yet initialized"
+                local raft_db_path="/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-data/raft/raft.db"
+                log_info "Checking for raft database at: $raft_db_path"
+
+                if [[ ! -f "$raft_db_path" ]]; then
+                    log_warning "⚠️  Vault is configured for persistent mode but raft.db not found at $raft_db_path"
+                    log_info "Directory listing of vault-data:"
+                    ls -la "/workspaces/$WORKSPACE_NAME/.devcontainer/data/vault-data/" 2>/dev/null || log_error "Could not list vault-data directory"
                     vault_configured=false
                     recommendations+=("Run vault-setup-wizard.sh to initialize persistent Vault")
-                    
+
                     echo ""
                     echo "═══════════════════════════════════════════════════════"
                     log_info "🔄 Initialize Persistent Vault:"
@@ -319,15 +353,18 @@ auto_detect_vault_status() {
                     echo "═══════════════════════════════════════════════════════"
                     echo ""
                 else
+                    log_info "✅ Raft database found at $raft_db_path"
                     # Check seal status for initialized persistent mode
+                    log_info "Checking Vault seal status..."
                     local seal_status=$(curl -s "$VAULT_ADDR/v1/sys/seal-status" | jq -r '.sealed' 2>/dev/null || echo "error")
-                    
+                    log_info "Vault seal status response: $seal_status"
+
                     if [[ "$seal_status" == "true" ]]; then
                         log_warning "🔒 Vault is SEALED (persistent mode)"
-                      
+
                       if [[ "${AUTO_UNSEAL:-false}" == "true" ]]; then
                           log_info "Auto-unseal is enabled. Attempting to unseal Vault..."
-                          
+
                           local unseal_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/vault-auto-unseal.sh"
                           if [[ -f "$unseal_script" ]]; then
                               if bash "$unseal_script"; then
@@ -336,7 +373,7 @@ auto_detect_vault_status() {
                                   log_error "Auto-unseal failed. Manual unsealing required."
                                   vault_configured=false
                                   recommendations+=("Unseal Vault manually - see instructions below")
-                                  
+
                                   echo ""
                                   echo "═══════════════════════════════════════════════════════"
                                   log_info "🔒 Manual Unseal Instructions:"
@@ -364,7 +401,7 @@ auto_detect_vault_status() {
                       else
                           log_info "Auto-unseal is disabled (manual unsealing required)"
                           vault_configured=false
-                          
+
                           echo ""
                           echo "═══════════════════════════════════════════════════════"
                           log_info "🔒 Vault Manual Unseal Required:"
@@ -394,6 +431,8 @@ auto_detect_vault_status() {
                         log_success "✅ Vault is unsealed and ready (persistent mode)"
                     elif [[ "$seal_status" == "error" ]]; then
                         log_warning "Could not determine Vault seal status"
+                        vault_configured=false
+                        recommendations+=("Check Vault server status and connectivity")
                     fi
                 fi
             else
@@ -402,6 +441,8 @@ auto_detect_vault_status() {
         else
             log_info "Vault mode configuration not found (assuming ephemeral mode)"
         fi
+    else
+        log_info "Vault server not accessible, skipping mode detection"
     fi
 
     # Check GitHub token

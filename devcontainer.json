@@ -16,7 +16,8 @@
     "GAS_REPORTER_ENABLED": "false",
     "REPORT_GAS": "false",
     "PYTHONUNBUFFERED": "1",
-    "PIP_DISABLE_PIP_VERSION_CHECK": "1"
+    "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+    "VAULT_ADDR": "http://vault-dev:8200"
   },
   "customizations": {
     "vscode": {
