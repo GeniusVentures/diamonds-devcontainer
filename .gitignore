@@ -39,3 +39,4 @@ docker-compose.local.yml
 *.swo
 *.bak
 *.tmp
+data/vault-data/
