@@ -191,13 +191,41 @@ setup_snyk() {
     if snyk auth --help >/dev/null 2>&1; then
         log_info "Snyk CLI is available"
 
-        # Check authentication status by looking for OAuth token storage
-        if snyk config | grep -q "INTERNAL_OAUTH_TOKEN_STORAGE"; then
-            log_success "Snyk is authenticated"
-        else
-            log_warning "Snyk is not authenticated. Run 'snyk auth' to authenticate."
-            log_info "You can also set SNYK_TOKEN environment variable (may require paid plan)"
+        # Check if already authenticated
+        if snyk whoami --experimental >/dev/null 2>&1; then
+            log_success "Snyk is already authenticated"
+            return 0
         fi
+
+        # Check for SNYK_TOKEN in .env file
+        local snyk_token=""
+        if [ -f .env ] && grep -q "^SNYK_TOKEN=" .env; then
+            snyk_token=$(grep "^SNYK_TOKEN=" .env | cut -d'=' -f2- | sed 's/^"//' | sed 's/"$//')
+            log_info "Found SNYK_TOKEN in .env file, attempting authentication..."
+        elif [ -f packages/diamonds/.env ] && grep -q "^SNYK_TOKEN=" packages/diamonds/.env; then
+            snyk_token=$(grep "^SNYK_TOKEN=" packages/diamonds/.env | cut -d'=' -f2- | sed 's/^"//' | sed 's/"$//')
+            log_info "Found SNYK_TOKEN in packages/diamonds/.env file, attempting authentication..."
+        fi
+
+        if [ -n "$snyk_token" ]; then
+            # Set the token and test authentication
+            export SNYK_TOKEN="$snyk_token"
+            if snyk whoami --experimental >/dev/null 2>&1; then
+                log_success "Snyk authenticated successfully using token from .env file"
+                return 0
+            else
+                log_warning "Failed to authenticate with SNYK_TOKEN from .env file"
+                unset SNYK_TOKEN
+            fi
+        fi
+
+        # If we reach here, authentication failed or no token was found
+        log_warning "Snyk is not authenticated."
+        log_info "To authenticate Snyk:"
+        log_info "  1. Visit https://app.snyk.io/account and generate an API token"
+        log_info "  2. Add 'SNYK_TOKEN=your_token_here' to your .env file"
+        log_info "  3. Or run 'snyk auth' manually (may not work in dev containers)"
+        log_info "Note: SNYK_TOKEN may require a paid Snyk plan for API access"
     else
         log_error "Snyk installation failed"
         return 1
