@@ -240,6 +240,42 @@ setup_development_server() {
     fi
 }
 
+# Function to persist Claude Code chats and wire up the GitHub token
+setup_claude_and_github() {
+    log_info "Configuring Claude Code persistence and GitHub auth..."
+
+    local claude_dir="$HOME/.claude"
+    local backup_dir="${WORKSPACE_FOLDER:-$PWD}/.claude-backup"
+
+    # One-time seed: if the persisted projects volume is empty but we stashed chats
+    # before the first rebuild, copy them in so history (and agent memory) carries over.
+    if [ -d "$claude_dir/projects" ] && [ -d "$backup_dir/projects" ] \
+        && [ -z "$(ls -A "$claude_dir/projects" 2>/dev/null)" ]; then
+        cp -a "$backup_dir/projects/." "$claude_dir/projects/" 2>/dev/null || true
+        { [ -d "$backup_dir/sessions" ] && [ -z "$(ls -A "$claude_dir/sessions" 2>/dev/null)" ] \
+            && cp -a "$backup_dir/sessions/." "$claude_dir/sessions/" 2>/dev/null; } || true
+        log_success "Seeded ~/.claude/{projects,sessions} from .claude-backup (one-time migration)"
+    fi
+
+    # GitHub token: prefer the env var injected by docker-compose env_file; otherwise
+    # read .devcontainer/.env so the token is usable in the current shell too.
+    if [ -z "${GH_TOKEN:-}" ] && [ -z "${GITHUB_TOKEN:-}" ] && [ -f ".devcontainer/.env" ]; then
+        local tok=""
+        tok=$(grep -E '^(GH_TOKEN|GITHUB_TOKEN)=' .devcontainer/.env 2>/dev/null | head -1 | cut -d= -f2- | tr -d "\"'" || true)
+        if [ -n "$tok" ]; then
+            export GH_TOKEN="$tok" GITHUB_TOKEN="$tok"
+        fi
+    fi
+
+    if [ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
+        gh auth setup-git >/dev/null 2>&1 \
+            && log_success "GitHub token detected — git credential helper configured" \
+            || log_warning "GitHub token present but 'gh auth setup-git' failed"
+    else
+        log_info "No GitHub token found (set GH_TOKEN in .devcontainer/.env to enable gh/git auth)"
+    fi
+}
+
 # Function to display welcome message
 display_welcome_message() {
     echo
@@ -290,6 +326,7 @@ main() {
     check_environment_health
     check_dependency_updates
     setup_environment_variables
+    setup_claude_and_github
     check_security_tools
     check_git_status
     setup_development_server

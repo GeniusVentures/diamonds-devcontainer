@@ -120,6 +120,7 @@ def generate_devcontainer(
     workspace_name = env_vars.get('WORKSPACE_NAME', 'diamonds_project')
     diamond_name = env_vars.get('DIAMOND_NAME', 'ExampleDiamond')
     vault_port = env_vars.get('VAULT_PORT', '8201')
+    gh_token = env_vars.get('GH_TOKEN', '')
     
     # Validate workspace name (must be valid for Docker)
     if not workspace_name.replace('_', '').replace('-', '').isalnum():
@@ -158,6 +159,7 @@ def generate_devcontainer(
         log(f"  WORKSPACE_NAME: {Colors.BLUE}{workspace_name}{Colors.NC}")
         log(f"  DIAMOND_NAME: {Colors.BLUE}{diamond_name}{Colors.NC}")
         log(f"  VAULT_PORT: {Colors.BLUE}{vault_port}{Colors.NC}")
+        log(f"  GH_TOKEN: {Colors.BLUE}{'hidden' if gh_token else 'not set'}{Colors.NC}")
         
     except Exception as e:
         log(f"Error generating devcontainer.json: {e}", Colors.RED)
@@ -168,6 +170,7 @@ def generate_devcontainer(
     os.environ['WORKSPACE_NAME'] = workspace_name
     os.environ['DIAMOND_NAME'] = diamond_name
     os.environ['VAULT_PORT'] = vault_port
+    os.environ['GH_TOKEN'] = gh_token
     
     # Export all other variables from .env as well
     for key, value in env_vars.items():

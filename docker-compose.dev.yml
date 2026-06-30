@@ -30,6 +30,11 @@ services:
       # TODO  Consider Removing reports volume if not needed
       - reports:/workspaces/${WORKSPACE_NAME:-diamonds_project}/reports
 
+      # Claude Code chat persistence across rebuilds (transcripts + agent memory + resume metadata).
+      # ~/.claude/.credentials.json stays on the ephemeral layer by design — only conversation data persists.
+      - claude-projects:/home/node/.claude/projects
+      - claude-sessions:/home/node/.claude/sessions
+
       # SSH and Git configuration
       - ~/.ssh:/home/node/.ssh:ro
       # - ~/.gitconfig:/home/node/.gitconfig  # Removed bind mount to avoid device busy errors
@@ -154,6 +159,8 @@ volumes:
   vault-data:
   vault-config:
   vault-logs:
+  claude-projects:
+  claude-sessions:
 
 # Networks for inter-service communication
 networks:

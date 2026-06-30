@@ -224,6 +224,12 @@ RUN echo "" >> /home/node/.bashrc && \
   echo 'export PS1="\[\033[01;32m\]\W\[\033[00m\] $ "' >> /home/node/.bashrc && \
   echo "export HARDHAT_DISABLE_TELEMETRY_PROMPT=true" >> /home/node/.bashrc
 
+# Pre-create Claude Code data dirs as the node user so the named volumes mounted
+# here (see docker-compose.dev.yml) initialize node-owned instead of root-owned.
+# This container has no sudo, so ownership cannot be fixed at runtime — it must be
+# seeded from the image. Placed last to keep this a cheap, cached rebuild.
+RUN mkdir -p /home/node/.claude/projects /home/node/.claude/sessions
+
 # Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD node --version && yarn --version && python3 --version && go version
