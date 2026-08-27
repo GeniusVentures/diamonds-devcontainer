@@ -21,7 +21,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
   PIP_DISABLE_PIP_VERSION_CHECK=1 \
   NODE_ENV=development \
   YARN_CACHE_FOLDER=/home/node/.yarn/cache \
-  PATH="/home/node/.local/bin:/home/node/.npm-global/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/node/go/bin"
+  PATH="/home/node/.local/bin:/home/node/.npm-global/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/node/go/bin" 
+  # WORKSPACE_FOLDER=/workspaces/${WORKSPACE_NAME:-diamonds_project} \
+  # WORKSPACE_NAME=${WORKSPACE_NAME:-diamonds_project}
 
 # Install system dependencies in a single layer for better caching
 # First update package lists and apply security updates
@@ -37,6 +39,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
   pkg-config \
   # Development tools
   git \
+  bash-completion \
   jq \
   lsb-release \
   software-properties-common \
@@ -99,6 +102,18 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | g
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
+# Install HashiCorp Vault CLI for secret management
+RUN set -ex \
+  && apt-get remove -y vault 2>/dev/null || true \
+  && rm -f /usr/bin/vault 2>/dev/null || true \
+  && VAULT_VERSION=$(curl -s https://api.github.com/repos/hashicorp/vault/releases/latest | jq -r '.tag_name' | sed 's/^v//') \
+  && wget -qO /tmp/vault.zip https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip \
+  && unzip /tmp/vault.zip -d /usr/local/bin \
+  && chmod +x /usr/local/bin/vault \
+  && chown root:root /usr/local/bin/vault \
+  && /usr/local/bin/vault --version \
+  && rm /tmp/vault.zip
+
 # Install Docker CLI and Docker Compose for Docker-in-Docker support
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
   && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
@@ -117,6 +132,11 @@ RUN git clone https://github.com/awslabs/git-secrets.git /tmp/git-secrets \
 # Switch to non-root user (already created by base Node.js image)
 USER node
 WORKDIR /home/node
+
+# Create .yarn directory structure with correct permissions before volume mount
+RUN mkdir -p /home/node/.yarn/cache && \
+    mkdir -p /home/node/.yarn/berry && \
+    mkdir -p /home/node/.yarn/install-state
 
 # Install Python security tools using pipx
 RUN pipx install slither-analyzer \
@@ -139,14 +159,13 @@ RUN curl -L https://foundry.paradigm.xyz | bash \
 
 # Set up global npm packages (security tools)
 # Note: @openzeppelin/cli removed as it's deprecated; use @openzeppelin/hardhat-upgrades in project dependencies instead
-RUN npm config set prefix /home/node/.npm-global \
-  && export PATH="/home/node/.npm-global/bin:$PATH" \
-  && npm install -g semver \
-  && npm install -g \
-  snyk \
-  @socketsecurity/cli \
-  ganache \
-  hardhat-shorthand
+RUN npm config set prefix /home/node/.npm-global
+RUN export PATH="/home/node/.npm-global/bin:$PATH"
+RUN npm install -g semver
+RUN npm install -g  snyk
+RUN npm install -g  @socketsecurity/cli 
+RUN npm install -g  ganache
+RUN npm install -g  hardhat-shorthand
 
 # Workspace directory already created above, just set workdir
 WORKDIR /workspaces/${WORKSPACE_NAME}
@@ -155,7 +174,8 @@ WORKDIR /workspaces/${WORKSPACE_NAME}
 COPY --chown=node:node package.json ./
 
 # Configure Yarn for better performance (using project-specified version via Corepack)
-RUN yarn config set cacheFolder /home/node/.yarn/cache
+RUN yarn config set cacheFolder /home/node/.yarn/cache && \
+    yarn config set globalFolder /tmp/yarn-global
 
 # Pre-install dependencies (will be overridden by post-create script)
 # Note: No yarn.lock file in repo, so installation will resolve latest compatible versions
@@ -191,6 +211,25 @@ RUN echo "alias ll='ls -alFh'" >> /home/node/.bashrc && \
   echo "alias la='ls -A'" >> /home/node/.bashrc && \
   echo "alias l='ls -CF'" >> /home/node/.bashrc
 
+# Enable bash completion including git-completion
+RUN echo "" >> /home/node/.bashrc && \
+  echo "# Enable bash completion" >> /home/node/.bashrc && \
+  echo "if [ -f /etc/bash_completion ]; then" >> /home/node/.bashrc && \
+  echo "  . /etc/bash_completion" >> /home/node/.bashrc && \
+  echo "fi" >> /home/node/.bashrc
+
+# Set custom PS1 prompt to show only current directory name
+RUN echo "" >> /home/node/.bashrc && \
+  echo "# Custom prompt - show only current directory name" >> /home/node/.bashrc && \
+  echo 'export PS1="\[\033[01;32m\]\W\[\033[00m\] $ "' >> /home/node/.bashrc && \
+  echo "export HARDHAT_DISABLE_TELEMETRY_PROMPT=true" >> /home/node/.bashrc
+
+# Pre-create Claude Code data dirs as the node user so the named volumes mounted
+# here (see docker-compose.dev.yml) initialize node-owned instead of root-owned.
+# This container has no sudo, so ownership cannot be fixed at runtime — it must be
+# seeded from the image. Placed last to keep this a cheap, cached rebuild.
+RUN mkdir -p /home/node/.claude/projects /home/node/.claude/sessions
+
 # Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD node --version && yarn --version && python3 --version && go version
@@ -198,7 +237,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Security note: Post-create scripts will perform additional security validation and tool setup
 
 # Expose ports for development
-EXPOSE 8545 8546 3000 5000 8080
+EXPOSE 8545 8546 8555 8556 3000 5000 8080
 
 # Default command
 CMD ["sleep", "infinity"]

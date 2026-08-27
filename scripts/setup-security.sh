@@ -117,14 +117,14 @@ setup_git_credentials() {
 
     if ! command_exists gh; then
         log_warning "GitHub CLI (gh) not found. Skipping credential helper setup."
-        log_info "Install gh and run 'gh auth login' to enable Git authentication."
+        log_info "Install gh and run 'gh auth login && gh auth setup-git' to enable Git authentication."
         return 0
     fi
 
     # Check if user is authenticated with gh
     if ! gh auth status >/dev/null 2>&1; then
         log_warning "Not authenticated with GitHub CLI."
-        log_info "Run 'gh auth login' to authenticate before using Git operations."
+        log_info "Run 'gh auth login && gh auth setup-git' to authenticate before using Git operations."
         return 0
     fi
 
@@ -187,7 +187,7 @@ setup_snyk() {
         npm install -g snyk
     fi
 
-    # Check if Snyk is authenticated
+    # Check if Snyk is authenticated via token or OAuth
     if snyk auth --help >/dev/null 2>&1; then
         log_info "Snyk CLI is available"
 
@@ -199,11 +199,11 @@ setup_snyk() {
 
         # Check for SNYK_TOKEN in .env file
         local snyk_token=""
-        if [ -f .env ] && grep -q "^SNYK_TOKEN=" .env; then
-            snyk_token=$(grep "^SNYK_TOKEN=" .env | cut -d'=' -f2- | sed 's/^"//' | sed 's/"$//')
+        if [ -f "$PROJECT_ROOT/.env" ] && grep -q "^SNYK_TOKEN=" "$PROJECT_ROOT/.env"; then
+            snyk_token=$(grep "^SNYK_TOKEN=" "$PROJECT_ROOT/.env" | cut -d'=' -f2- | sed 's/^"//' | sed 's/"$//')
             log_info "Found SNYK_TOKEN in .env file, attempting authentication..."
-        elif [ -f packages/diamonds/.env ] && grep -q "^SNYK_TOKEN=" packages/diamonds/.env; then
-            snyk_token=$(grep "^SNYK_TOKEN=" packages/diamonds/.env | cut -d'=' -f2- | sed 's/^"//' | sed 's/"$//')
+        elif [ -f "$PROJECT_ROOT/packages/diamonds/.env" ] && grep -q "^SNYK_TOKEN=" "$PROJECT_ROOT/packages/diamonds/.env"; then
+            snyk_token=$(grep "^SNYK_TOKEN=" "$PROJECT_ROOT/packages/diamonds/.env" | cut -d'=' -f2- | sed 's/^"//' | sed 's/"$//')
             log_info "Found SNYK_TOKEN in packages/diamonds/.env file, attempting authentication..."
         fi
 
@@ -245,7 +245,7 @@ setup_socket() {
         log_success "Socket.dev CLI is ready"
 
         # Check if API token is configured in .env file
-        if [ -f .env ] && grep -q "^SOCKET_CLI_API_TOKEN=" .env; then
+        if [ -f "$PROJECT_ROOT/.env" ] && grep -q "^SOCKET_CLI_API_TOKEN=" "$PROJECT_ROOT/.env"; then
             log_success "Socket.dev API token is configured in .env"
         else
             log_warning "SOCKET_CLI_API_TOKEN not set in .env file. Set it in .env for full functionality."
@@ -294,7 +294,32 @@ setup_osv_scanner() {
             return 1
         fi
         
-        go install github.com/google/osv-scanner/cmd/osv-scanner@latest
+        # Try Go install with proxy configuration
+        log_info "Attempting Go install with proxy configuration..."
+        export GOPROXY="https://proxy.golang.org,direct"
+        export GOSUMDB="sum.golang.org"
+        
+        if go install github.com/google/osv-scanner/cmd/osv-scanner@latest 2>/dev/null; then
+            log_success "OSV-Scanner installed via Go"
+        else
+            log_warning "Go install failed, trying direct binary download..."
+            
+            # Fallback: Try to download pre-built binary
+            local osv_version="1.9.2"
+            local osv_url="https://github.com/google/osv-scanner/releases/download/v${osv_version}/osv-scanner_${osv_version}_linux_amd64.tar.gz"
+            
+            if command_exists curl && curl -s --head "$osv_url" >/dev/null 2>&1; then
+                log_info "Downloading OSV-Scanner binary v${osv_version}..."
+                mkdir -p "$HOME/go/bin"
+                curl -L "$osv_url" | tar -xz -C "$HOME/go/bin" --strip-components=1 "osv-scanner_${osv_version}_linux_amd64/osv-scanner" 2>/dev/null && \
+                chmod +x "$HOME/go/bin/osv-scanner" && \
+                log_success "OSV-Scanner binary downloaded successfully"
+            else
+                log_warning "Binary download failed. OSV-Scanner will be skipped."
+                log_info "You can install OSV-Scanner manually later with: go install github.com/google/osv-scanner/cmd/osv-scanner@latest"
+                return 0  # Don't fail the entire setup
+            fi
+        fi
         
         # Verify installation with explicit path
         if [ -f "$HOME/go/bin/osv-scanner" ]; then
@@ -396,6 +421,10 @@ run_security_health_check() {
 # Main execution
 main() {
     log_info "Starting Diamonds security tools setup..."
+
+    # Determine project root
+    PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    log_info "Project root determined as: $PROJECT_ROOT"
 
     # Setup each security tool
     setup_git_secrets

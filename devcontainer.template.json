@@ -1,13 +1,28 @@
 {
   "name": "Diamonds Development Environment",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": "..",
-    "args": {
-      "NODE_VERSION": "22",
-      "PYTHON_VERSION": "3.11",
-      "WORKSPACE_NAME": "${localEnv:WORKSPACE_NAME:diamonds_project}"
-    }
+  "dockerComposeFile": [
+    "docker-compose.dev.yml"
+  ],
+  "service": "devcontainer",
+  "workspaceFolder": "/workspaces/__WORKSPACE_NAME__",
+  "initializeCommand": "python3 .devcontainer/scripts/init-devcontainer.py || python .devcontainer/scripts/init-devcontainer.py",
+  "remoteEnv": {
+    "WORKSPACE_NAME": "__WORKSPACE_NAME__",
+    "WORKSPACE_FOLDER": "/workspaces/__WORKSPACE_NAME__"
+  },
+  "containerEnv": {
+    "WORKSPACE_NAME": "__WORKSPACE_NAME__",
+    "WORKSPACE_FOLDER": "/workspaces/__WORKSPACE_NAME__",
+    "DIAMOND_NAME": "__DIAMOND_NAME__",
+    "NODE_ENV": "development",
+    "HARDHAT_NETWORK": "hardhat",
+    "YARN_ENABLE_IMMUTABLE_INSTALLS": "false",
+    "CI_MODE": "false",
+    "GAS_REPORTER_ENABLED": "false",
+    "REPORT_GAS": "false",
+    "PYTHONUNBUFFERED": "1",
+    "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+    "VAULT_ADDR": "http://vault-dev:__VAULT_PORT__"
   },
   "customizations": {
     "vscode": {
@@ -24,14 +39,15 @@
         "GitHub.copilot-chat",
         "eamodio.gitlens",
         "usernamehw.errorlens",
+        "github.vscode-pull-request-github",
         "github.vscode-github-actions",
         "ms-python.python",
-        "golang.Go",
         "ms-vscode.vscode-markdown",
         "redhat.vscode-yaml",
         "ms-vscode.vscode-git-graph",
         "streetsidesoftware.code-spell-checker",
-        "ms-vscode.vscode-security"
+        "ms-vscode.vscode-security",
+        "mads-hartmann.bash-ide-vscode"
       ],
       "settings": {
         "typescript.preferences.includePackageJsonAutoImports": "auto",
@@ -69,7 +85,8 @@
     8546,
     3000,
     5000,
-    8080
+    8080,
+    8200
   ],
   "portsAttributes": {
     "8545": {
@@ -80,6 +97,10 @@
       "label": "Additional Blockchain Node",
       "onAutoForward": "silent"
     },
+    "8200": {
+      "label": "Vault Dev Server",
+      "onAutoForward": "silent"
+    },
     "3000": {
       "label": "Frontend Development",
       "onAutoForward": "silent"
@@ -88,33 +109,9 @@
   "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
   "postStartCommand": "bash .devcontainer/scripts/post-start.sh",
   "postAttachCommand": "bash .devcontainer/scripts/setup-security.sh",
-  "containerEnv": {
-    "NODE_ENV": "development",
-    "HARDHAT_NETWORK": "hardhat",
-    "YARN_ENABLE_IMMUTABLE_INSTALLS": "false",
-    "CI_MODE": "false",
-    "GAS_REPORTER_ENABLED": "false",
-    "REPORT_GAS": "false",
-    "PYTHONUNBUFFERED": "1",
-    "PIP_DISABLE_PIP_VERSION_CHECK": "1",
-    "DIAMOND_NAME": "${localEnv:DIAMOND_NAME:ExampleDiamond}"
-  },
-  "mounts": [
-    "source=${localWorkspaceFolder}/node_modules,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/node_modules,type=bind,consistency=cached",
-    "source=${localWorkspaceFolder}/artifacts,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/artifacts,type=bind,consistency=cached",
-    "source=${localWorkspaceFolder}/cache,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/cache,type=bind,consistency=cached",
-    "source=${localWorkspaceFolder}/diamond-abi,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/diamond-abi,type=bind,consistency=cached",
-    "source=${localWorkspaceFolder}/diamond-typechain-types,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/diamond-typechain-types,type=bind,consistency=cached",
-    "source=${localWorkspaceFolder}/typechain-types,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/typechain-types,type=bind,consistency=cached",
-    "source=${localWorkspaceFolder}/reports,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/reports,type=bind,consistency=cached",
-    "source=${localWorkspaceFolder}/.git,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/.git,type=bind,consistency=cached",
-    "source=${localWorkspaceFolder}/.env,target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}/.env,type=bind,consistency=cached"
-  ],
-  "workspaceFolder": "/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project}",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/${localEnv:WORKSPACE_NAME:diamonds_project},type=bind,consistency=cached",
   "remoteUser": "node",
   "overrideCommand": false,
-  "shutdownAction": "stopContainer",
+  "shutdownAction": "stopCompose",
   "hostRequirements": {
     "cpus": 2,
     "memory": "4gb",

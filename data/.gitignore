@@ -1,0 +1,16 @@
+# Vault persistent data (developer-specific)
+vault-data/*
+!vault-data/.gitkeep
+
+# Vault unseal keys (sensitive)
+vault-unseal-keys.json
+**/vault-unseal-keys.json
+
+# Vault configuration (developer-specific)
+vault-mode.conf
+
+# Vault data backups
+vault-data-backups/
+
+# Keep template directory tracked
+!vault-data.template/

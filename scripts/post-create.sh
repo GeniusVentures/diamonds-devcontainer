@@ -42,10 +42,13 @@ install_dependencies() {
 
         # Configure Yarn for better performance (Yarn 4.x compatible)
         yarn config set nodeLinker node-modules 2>/dev/null || log_warning "Could not set node linker"
+        
+        # Set yarn global folder to a writable location to avoid permission issues
+        yarn config set globalFolder /tmp/yarn-global 2>/dev/null || log_warning "Could not set yarn global folder"
 
         # Check if we have permission issues with .yarn directory
         if [ -d "/home/node/.yarn" ] && [ ! -w "/home/node/.yarn" ]; then
-            log_warning ".yarn directory has permission issues. This should be fixed in devcontainer.json"
+            log_warning ".yarn directory has permission issues. Using /tmp for yarn global folder instead."
         fi
 
         # Install dependencies (don't fail completely on git dependency issues)
@@ -109,6 +112,113 @@ compile_solidity() {
     fi
 }
 
+# Function to install Medusa fuzzer
+install_medusa() {
+    log_info "Installing Medusa fuzzer..."
+
+    # Check if Medusa is already installed
+    if command_exists medusa; then
+        local current_version
+        current_version=$(medusa --version 2>/dev/null | grep -oP 'version \K[0-9.]+' || echo "unknown")
+        log_info "Medusa is already installed: $current_version"
+        return 0
+    fi
+
+    # Detect system architecture
+    local arch
+    arch=$(uname -m)
+    local medusa_arch=""
+    
+    case "$arch" in
+        x86_64|amd64)
+            medusa_arch="linux-x64"
+            ;;
+        aarch64|arm64)
+            medusa_arch="linux-arm64"
+            ;;
+        *)
+            log_error "Unsupported architecture: $arch"
+            log_warning "Medusa installation skipped. Manual installation may be required."
+            return 1
+            ;;
+    esac
+
+    log_info "Detected architecture: $arch (using medusa-$medusa_arch binary)"
+
+    # Get latest release URL from GitHub
+    local latest_release_url="https://api.github.com/repos/crytic/medusa/releases/latest"
+    local download_url
+    
+    log_info "Fetching latest Medusa release information..."
+    download_url=$(curl -s "$latest_release_url" | grep "browser_download_url.*medusa-${medusa_arch}.tar.gz\"" | cut -d '"' -f 4)
+
+    if [ -z "$download_url" ]; then
+        log_error "Failed to fetch Medusa download URL"
+        log_warning "Medusa installation skipped. You can install it manually from: https://github.com/crytic/medusa"
+        return 1
+    fi
+
+    log_info "Downloading Medusa from: $download_url"
+
+    # Create temporary directory for download
+    local temp_dir
+    temp_dir=$(mktemp -d)
+    
+    # Download Medusa
+    if curl -L -o "$temp_dir/medusa.tar.gz" "$download_url"; then
+        log_success "Medusa downloaded successfully"
+    else
+        log_error "Failed to download Medusa"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    # Extract archive
+    log_info "Extracting Medusa..."
+    if tar -xzf "$temp_dir/medusa.tar.gz" -C "$temp_dir"; then
+        log_success "Medusa extracted successfully"
+    else
+        log_error "Failed to extract Medusa"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    # Create local bin directory if it doesn't exist
+    mkdir -p "$HOME/.local/bin"
+
+    # Install to ~/.local/bin
+    log_info "Installing Medusa to ~/.local/bin/medusa..."
+    if mv "$temp_dir/medusa" "$HOME/.local/bin/medusa"; then
+        chmod +x "$HOME/.local/bin/medusa"
+        log_success "Medusa installed successfully"
+    else
+        log_error "Failed to install Medusa to ~/.local/bin"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    # Clean up
+    rm -rf "$temp_dir"
+
+    # Add to PATH if not already there
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        export PATH="$HOME/.local/bin:$PATH"
+        log_info "Added ~/.local/bin to PATH for this session"
+    fi
+
+    # Verify installation
+    if command_exists medusa; then
+        local installed_version
+        installed_version=$(medusa --version 2>/dev/null | grep -oP 'version \K[0-9.]+' || echo "installed")
+        log_success "Medusa is now available: version $installed_version"
+        return 0
+    else
+        log_error "Medusa installation verification failed"
+        log_warning "You may need to add ~/.local/bin to your PATH manually"
+        return 1
+    fi
+}
+
 # Function to generate TypeChain types
 generate_typechain() {
     log_info "Generating TypeChain types..."
@@ -135,6 +245,33 @@ generate_typechain() {
         log_success "TypeChain types generated successfully"
     else
         log_warning "TypeChain generation failed. This may be expected if contracts haven't been compiled yet."
+    fi
+}
+
+# Function to setup git configuration
+setup_git_config() {
+    log_info "Setting up git configuration..."
+
+    # Copy host .gitconfig if it was saved by initializeCommand
+    if [ -f .devcontainer/.gitconfig.host ] && [ ! -f /home/node/.gitconfig ]; then
+        log_info "Copying git configuration from host..."
+        cp .devcontainer/.gitconfig.host /home/node/.gitconfig
+        chmod 644 /home/node/.gitconfig
+        log_success "Git configuration copied from host"
+    elif [ -f /home/node/.gitconfig ]; then
+        log_info "Git configuration already exists in container"
+    else
+        log_info "No host git configuration found, creating basic config..."
+        # Create a basic .gitconfig if none exists
+        cat > /home/node/.gitconfig << 'EOF'
+[core]
+    filemode = false
+[init]
+    defaultBranch = main
+[credential]
+    helper = store
+EOF
+        log_success "Basic git configuration created"
     fi
 }
 
@@ -275,9 +412,81 @@ verify_environment() {
     log_info "Environment verification: $checks_passed/$total_checks checks passed"
 }
 
+# Function to fetch secrets from Vault
+fetch_vault_secrets() {
+    log_info "Fetching secrets from HashiCorp Vault..."
+
+    local vault_script="/workspaces/$WORKSPACE_NAME/.devcontainer/scripts/vault-fetch-secrets.sh"
+
+    if [[ -f "$vault_script" ]]; then
+        if [[ -x "$vault_script" ]]; then
+            log_info "Running Vault secret fetch script..."
+            if "$vault_script"; then
+                log_success "Vault secrets fetched successfully"
+            else
+                log_warning "Vault secret fetching failed, but continuing setup..."
+                log_info "You may need to run: $vault_script manually"
+                log_info "Or migrate secrets using: ./scripts/setup/migrate-secrets-to-vault.sh"
+            fi
+        else
+            log_warning "Vault script exists but is not executable: $vault_script"
+            log_info "Making script executable and running..."
+            chmod +x "$vault_script"
+            if "$vault_script"; then
+                log_success "Vault secrets fetched successfully"
+            else
+                log_warning "Vault secret fetching failed after making executable"
+            fi
+        fi
+    else
+        log_warning "Vault secret fetch script not found: $vault_script"
+        log_info "You may need to set up Vault integration manually"
+    fi
+}
+
+# Function to ensure Vault CLI is installed
+install_vault_cli() {
+    log_info "Checking Vault CLI installation..."
+
+    if command_exists vault; then
+        local vault_version=$(vault version | head -n1 | awk '{print $2}')
+        log_success "Vault CLI already installed: $vault_version"
+        return 0
+    fi
+
+    log_warning "Vault CLI not found. Installing from fallback script..."
+    
+    local install_script="${BASH_SOURCE%/*}/install-vault-cli.sh"
+    if [ ! -f "$install_script" ]; then
+        # Try alternative paths
+        install_script=".devcontainer/scripts/install-vault-cli.sh"
+        if [ ! -f "$install_script" ]; then
+            log_error "Vault CLI installation script not found"
+            log_warning "Vault CLI will not be available. Some features may be limited."
+            return 0  # Non-blocking - don't fail the entire post-create
+        fi
+    fi
+
+    if bash "$install_script"; then
+        log_success "Vault CLI installed successfully via fallback script"
+        
+        # Verify installation
+        if command_exists vault; then
+            local vault_version=$(vault version | head -n1 | awk '{print $2}')
+            log_success "Vault CLI verified: $vault_version"
+        else
+            log_warning "Vault CLI installation completed but command not available"
+            log_info "You may need to restart your terminal or run: source ~/.bashrc"
+        fi
+    else
+        log_warning "Vault CLI installation failed"
+        log_info "This is non-blocking. You can install manually later."
+    fi
+}
+
 # Function to display next steps
 display_next_steps() {
-    log_success "Diamonds DevContainer setup completed!"
+    log_success "Diamonds DevContainer post-create setup completed!"
     echo
     log_info "Next steps:"
     echo "  1. Run 'yarn test' to execute the test suite"
@@ -293,6 +502,8 @@ display_next_steps() {
     echo "  yarn lint         - Run linting"
     echo "  yarn security-check - Run security scans"
     echo "  npx hardhat help  - Show Hardhat commands"
+    echo
+    echo "If run during DevContainer creation, post-start setup should run automatically."
 }
 
 # Main execution
@@ -301,8 +512,10 @@ main() {
 
     # Run setup steps
     install_dependencies
+    setup_git_config
     compile_typescript
     compile_solidity
+    # install_medusa
     generate_typechain
     setup_husky_hooks
     run_linting
@@ -310,6 +523,9 @@ main() {
     setup_hardhat_config
     setup_multichain_testing
     verify_environment
+    # NOTE: Vault setup and secret migration are manual operations
+    # Run manually: .devcontainer/scripts/setup/vault-setup-wizard.sh
+    # And: .devcontainer/scripts/setup/migrate-secrets-to-vault.sh
 
     # Display next steps
     display_next_steps

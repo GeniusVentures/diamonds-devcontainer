@@ -227,11 +227,28 @@ yarn security-check
 
 ### Authentication Setup
 
-```bash
-# Snyk authentication
-snyk auth
+#### Snyk Authentication (Token-Based)
 
-# Socket.dev setup
+OAuth flow doesn't work in devcontainers. Use token-based authentication:
+
+```bash
+# Option 1: Direct authentication with token
+# Get your token from: https://app.snyk.io/account
+snyk auth <your-token>
+
+# Option 2: Environment variable (recommended for persistence)
+export SNYK_TOKEN=<your-token>
+
+# Add to .env file for automatic loading
+echo "SNYK_TOKEN=your_snyk_token" >> .env
+
+# Verify authentication
+snyk whoami
+```
+
+#### Socket.dev Setup
+
+```bash
 export SOCKET_CLI_API_TOKEN=your_token
 ```
 
@@ -312,7 +329,7 @@ slither --version
 # Check port usage
 lsof -i :8545
 
-# Change ports in docker-compose.yml
+# Change ports in docker-compose.yml or configure in .env
 ports:
   - "8547:8545"  # Map host 8547 to container 8545
 ```
@@ -353,7 +370,7 @@ npx hardhat compile --parallel
 # Test network connectivity
 curl -X POST -H "Content-Type: application/json" \
   --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
-  http://localhost:8545
+  http://localhost:${HARDHAT_PORT:-8545}
 ```
 
 #### Infura/Alchemy Issues

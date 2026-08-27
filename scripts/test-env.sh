@@ -94,6 +94,64 @@ else
     ((TESTS_FAILED++))
 fi
 
+# Test 5.5: Check Vault CLI availability
+echo -e "\n${BLUE}Test 5.5: Vault CLI${NC}"
+if command -v vault >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ PASS${NC} - Vault CLI is available"
+    ((TESTS_PASSED++))
+else
+    echo -e "${YELLOW}⚠ INFO${NC} - Vault CLI not found (optional for development)"
+    ((TESTS_PASSED++))
+fi
+
+# Test 5.6: Check Vault connectivity
+echo -e "\n${BLUE}Test 5.6: Vault Connectivity${NC}"
+if command -v vault >/dev/null 2>&1; then
+    if [[ -n "${VAULT_ADDR:-}" ]]; then
+        if vault status >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ PASS${NC} - Vault is accessible at ${VAULT_ADDR}"
+            ((TESTS_PASSED++))
+        else
+            echo -e "${YELLOW}⚠ WARN${NC} - Vault not accessible at ${VAULT_ADDR:-localhost:8200}"
+            echo -e "  Make sure Vault is running: docker-compose up vault-dev"
+            ((TESTS_PASSED++))
+        fi
+    else
+        echo -e "${YELLOW}⚠ INFO${NC} - VAULT_ADDR not set"
+        ((TESTS_PASSED++))
+    fi
+else
+    echo -e "${YELLOW}⚠ INFO${NC} - Vault CLI not available"
+    ((TESTS_PASSED++))
+fi
+
+# Test 5.7: Check Vault authentication and secrets
+echo -e "\n${BLUE}Test 5.7: Vault Secrets${NC}"
+if command -v vault >/dev/null 2>&1 && [[ -n "${VAULT_ADDR:-}" ]]; then
+    if vault status >/dev/null 2>&1; then
+        if [[ -n "${VAULT_TOKEN:-}" ]] || [[ -f ~/.vault-token ]] || [[ -f .vault-token ]]; then
+            if vault kv list secret/dev >/dev/null 2>&1; then
+                echo -e "${GREEN}✓ PASS${NC} - Vault secrets are accessible"
+                ((TESTS_PASSED++))
+            else
+                echo -e "${YELLOW}⚠ WARN${NC} - Vault authenticated but no secrets found in secret/dev"
+                echo -e "  Run: ./scripts/setup/migrate-secrets-to-vault.sh"
+                ((TESTS_PASSED++))
+            fi
+        else
+            echo -e "${YELLOW}⚠ WARN${NC} - Vault accessible but not authenticated"
+            echo -e "  Run: vault login -method=github token=\$(gh auth token)"
+            ((TESTS_PASSED++))
+        fi
+    else
+        echo -e "${YELLOW}⚠ INFO${NC} - Vault not accessible"
+        ((TESTS_PASSED++))
+    fi
+else
+    echo -e "${YELLOW}⚠ INFO${NC} - Vault not configured"
+    ((TESTS_PASSED++))
+fi
+
 # Test 6: Check if contracts directory exists
 echo -e "\n${BLUE}Test 6: Project Structure${NC}"
 if [ -d "contracts" ] && [ -d "scripts" ] && [ -d "test" ]; then

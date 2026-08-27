@@ -1,0 +1,169 @@
+# Diamonds DevContainer Docker Compose Configuration with Vault Integration
+# Provides multi-service development environment with secure secret management
+
+services:
+  # Main DevContainer service
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+      args:
+        NODE_VERSION: 20
+        PYTHON_VERSION: 3.11
+        WORKSPACE_NAME: ${WORKSPACE_NAME:-diamonds_project}
+    # Use env_file to load .env
+    env_file:
+      - .env
+    volumes:
+      # Project source code
+      - ..:/workspaces/${WORKSPACE_NAME:-diamonds_project}:cached
+
+      # Cache volumes for performance
+      - yarn-cache:/home/node/.yarn/cache
+      - node-modules:/workspaces/${WORKSPACE_NAME:-diamonds_project}/node_modules
+      - hardhat-artifacts:/workspaces/${WORKSPACE_NAME:-diamonds_project}/artifacts
+      # TODO This may not be necessary and may change in v2.27.0 of Hardhat
+      - hardhat-cache:/workspaces/${WORKSPACE_NAME:-diamonds_project}/cache
+      - diamond-abi:/workspaces/${WORKSPACE_NAME:-diamonds_project}/diamond-abi
+      - diamond-typechain:/workspaces/${WORKSPACE_NAME:-diamonds_project}/diamond-typechain-types
+      - typechain-types:/workspaces/${WORKSPACE_NAME:-diamonds_project}/typechain-types
+      # TODO  Consider Removing reports volume if not needed
+      - reports:/workspaces/${WORKSPACE_NAME:-diamonds_project}/reports
+
+      # Claude Code chat persistence across rebuilds (transcripts + agent memory + resume metadata).
+      # ~/.claude/.credentials.json stays on the ephemeral layer by design — only conversation data persists.
+      - claude-projects:/home/node/.claude/projects
+      - claude-sessions:/home/node/.claude/sessions
+
+      # SSH and Git configuration
+      - ~/.ssh:/home/node/.ssh:ro
+      # - ~/.gitconfig:/home/node/.gitconfig  # Removed bind mount to avoid device busy errors
+
+      # NOTE: .devcontainer/.env is loaded via env_file above for Docker Compose config
+      # Project .env file is separate and managed by vault scripts
+
+    working_dir: /workspaces/${WORKSPACE_NAME:-diamonds_project}
+    command: sleep infinity
+    ports:
+      - "${ADDITIONAL_BLOCKCHAIN_PORT:-8556}:8546" # Additional Blockchain Node
+      - "${FRONTEND_PORT:-3001}:3000" # Frontend Development
+      - "${API_PORT:-5001}:5000" # API/Backend
+      - "${DOC_PORT:-8081}:8080" # Documentation/Other
+    environment:
+      - NODE_ENV=development
+      - HARDHAT_NETWORK=hardhat
+      - CI_MODE=false
+      - GAS_REPORTER_ENABLED=false
+      - REPORT_GAS=false
+      - PYTHONUNBUFFERED=1
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
+      - WORKSPACE_NAME=${WORKSPACE_NAME:-diamonds_project}
+      - WORKSPACE_FOLDER=/workspaces/${WORKSPACE_NAME:-diamonds_project}
+      - VAULT_ADDR=http://vault-dev:8200
+      - DIAMOND_NAME=${DIAMOND_NAME:-ExampleDiamond}
+    networks:
+      - project-network
+    depends_on:
+      - vault-dev
+      - hardhat-node
+    healthcheck:
+      test: ["CMD", "node", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # HashiCorp Vault Dev Server for secure secret management
+  #
+  # Environment Variables (from .env file):
+  #   VAULT_COMMAND - Controls Vault mode:
+  #     - Ephemeral (default): server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200
+  #     - Persistent: server -config=/vault/config/vault-persistent.hcl
+  #
+  # To switch modes:
+  #   1. Edit .devcontainer/.env and change VAULT_COMMAND value
+  #   2. Restart service: docker compose -f .devcontainer/docker-compose.dev.yml restart vault-dev
+  #
+  # Override from command line:
+  #   VAULT_COMMAND='server -config=/vault/config/vault-persistent.hcl' docker compose up -d
+  vault-dev:
+    image: hashicorp/vault:latest
+    entrypoint: ["sh", "/vault/startup.sh"]
+    ports:
+      - "${VAULT_PORT:-8200}:8200"
+    environment:
+      # Workspace folder for accessing config files
+      - WORKSPACE_FOLDER=/workspaces/${WORKSPACE_NAME:-diamonds_project}
+      # Vault mode control (set by wizard)
+      - VAULT_COMMAND=${VAULT_COMMAND:-server -dev -dev-root-token-id=root -dev-listen-address=0.0.0.0:8200}
+      # Vault address for CLI commands
+      - VAULT_ADDR=http://127.0.0.1:8200
+      # Log level
+      - VAULT_LOG_LEVEL=info
+    volumes:
+      # Startup script
+      - ./scripts/vault-startup.sh:/vault/startup.sh:ro
+
+      # Config file for persistent mode (conditionally used)
+      - ./config/vault-persistent.hcl:/vault/config/vault-persistent.hcl:ro
+
+      # Persistent storage (bind mount to host, conditionally used)
+      - ./data/vault-data:/vault/data
+
+      # Logs (always available)
+      - vault-logs:/vault/logs
+    cap_add:
+      - IPC_LOCK
+    networks:
+      - project-network
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # Local Hardhat Network Node
+  hardhat-node:
+    image: node:20-bookworm
+    volumes:
+      - ..:/workspaces/${WORKSPACE_NAME:-diamonds_project}:cached
+      - ../node_modules:/workspaces/${WORKSPACE_NAME:-diamonds_project}/node_modules:ro
+    working_dir: /workspaces/${WORKSPACE_NAME:-diamonds_project}
+    command: npx hardhat node --hostname 0.0.0.0 --port ${HARDHAT_PORT:-8545}
+    ports:
+      - "${HARDHAT_PORT:-8545}:8545"
+    environment:
+      - NODE_ENV=development
+      - WORKSPACE_NAME=${WORKSPACE_NAME:-diamonds_project}
+    networks:
+      - project-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${HARDHAT_PORT:-8545}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+# Named volumes for persistence and caching
+volumes:
+  yarn-cache:
+  node-modules:
+  hardhat-artifacts:
+  hardhat-cache:
+  diamond-abi:
+  diamond-typechain:
+  typechain-types:
+  # TODO this will have to be removed if reports volume is not needed
+  reports:
+  vault-data:
+  vault-config:
+  vault-logs:
+  claude-projects:
+  claude-sessions:
+
+# Networks for inter-service communication
+networks:
+  project-network:
+    name: ${WORKSPACE_NAME:-diamonds_project}-network
+    driver: bridge

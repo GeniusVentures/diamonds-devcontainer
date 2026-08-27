@@ -1,0 +1,12 @@
+{
+  "name": "@diamonds-lab/devcontainer",
+  "version": "1.1.1",
+  "description": "DevContainer configuration for diamonds development environment",
+  "private": true,
+  "scripts": {
+    "lint": "echo 'Linting devcontainer configuration...'",
+    "test": "echo 'Testing devcontainer setup...'",
+    "validate": "echo 'Validating devcontainer configuration...'"
+  },
+  "devDependencies": {}
+}
