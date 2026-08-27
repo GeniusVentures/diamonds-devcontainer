@@ -108,7 +108,7 @@
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "concurrently": "^8.2.2",
-    "contracts-starter": "https://github.com/mudgen/diamond-2-hardhat.git",
+    "contracts-starter": "https://github.com/mudgen/diamond-2-hardhat.git#commit=bf67b736ad5fa3366551f599e204784856fb3069",
     "diamonds": "https://github.com/GeniusVentures/diamonds.git#develop",
     "dotenv": "^16.4.7",
     "eslint": "^9.17.0",
